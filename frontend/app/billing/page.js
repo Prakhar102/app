@@ -6,8 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from 'sonner';
-import { Mic, Plus, Trash2, Download, Loader2 } from 'lucide-react';
+import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -23,7 +32,9 @@ export default function BillingPage() {
   const [listening, setListening] = useState(false);
   const [voiceText, setVoiceText] = useState('');
   const [shopConfig, setShopConfig] = useState({});
+  const [bankAccounts, setBankAccounts] = useState([]);
 
+  // Manual billing form
   // Manual billing form
   const [billItems, setBillItems] = useState([{ itemName: '', qty: '', rate: '', amount: 0 }]);
   const [billData, setBillData] = useState({
@@ -31,12 +42,34 @@ export default function BillingPage() {
     customerId: '',
     paymentMode: 'CASH',
     paidAmount: 0,
+    bankAccountId: '',
   });
+
+  // Add Customer Modal State
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({
+    name: '',
+    mobile: '',
+    address: '',
+  });
+  const [customerLoading, setCustomerLoading] = useState(false);
+
+  // Add Bank Account Modal State
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [newBankData, setNewBankData] = useState({
+    accountName: '',
+    accountNumber: '',
+    ifscCode: '',
+    upiId: '',
+    openingBalance: 0,
+  });
+  const [bankLoading, setBankLoading] = useState(false);
 
   useEffect(() => {
     fetchProducts();
     fetchCustomers();
     fetchSettings();
+    fetchBankAccounts();
   }, []);
 
   const fetchProducts = async () => {
@@ -72,6 +105,18 @@ export default function BillingPage() {
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
+    }
+  };
+
+  const fetchBankAccounts = async () => {
+    try {
+      const response = await fetch('/api/bank-accounts');
+      const data = await response.json();
+      if (data.success) {
+        setBankAccounts(data.accounts);
+      }
+    } catch (error) {
+      console.error('Failed to fetch bank accounts:', error);
     }
   };
 
@@ -168,6 +213,7 @@ export default function BillingPage() {
       paidAmount: data.paidAmount || 0,
       dueAmount: (data.totalAmount || 0) - (data.paidAmount || 0),
       paymentMode: data.paymentMode || 'CASH',
+      bankAccountId: data.paymentMode === 'ONLINE' ? (bankAccounts[0]?._id || null) : null,
       description: data.description || '',
     };
 
@@ -227,6 +273,13 @@ export default function BillingPage() {
       const total = calculateTotal();
       const paid = parseFloat(billData.paidAmount) || 0;
 
+      // Validation for Online Payment account
+      if (billData.paymentMode === 'ONLINE' && !billData.bankAccountId) {
+        toast.error('Please select a bank account for online payment');
+        setLoading(false);
+        return;
+      }
+
       // Find or create customer
       let customerId = billData.customerId;
       if (billData.customerName && !customerId) {
@@ -263,6 +316,7 @@ export default function BillingPage() {
         paidAmount: paid,
         dueAmount: total - paid,
         paymentMode: billData.paymentMode,
+        bankAccountId: billData.bankAccountId,
       };
 
       const response = await fetch('/api/transactions', {
@@ -273,8 +327,8 @@ export default function BillingPage() {
 
       const result = await response.json();
       if (result.success) {
-        toast.success('Bill created successfully!');
-        generatePDF(result.transaction);
+        toast.success('Bill saved successfully!');
+        // generatePDF(result.transaction);
         // Reset form
         setBillItems([{ itemName: '', qty: '', rate: '', amount: 0 }]);
         setBillData({ customerName: '', customerId: '', paymentMode: 'CASH', paidAmount: 0 });
@@ -286,6 +340,77 @@ export default function BillingPage() {
       toast.error('Error creating bill');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCustomer = async (e) => {
+    e.preventDefault();
+    setCustomerLoading(true);
+    try {
+      const response = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCustomerData),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Customer added successfully');
+        await fetchCustomers(); // Refresh list
+
+        // Auto-select the new customer
+        setBillData(prev => ({
+          ...prev,
+          customerName: data.customer.name,
+          customerId: data.customer._id
+        }));
+
+        setIsCustomerModalOpen(false);
+        setNewCustomerData({ name: '', mobile: '', address: '' });
+      } else {
+        toast.error(data.error || 'Failed to add customer');
+      }
+    } catch (error) {
+      toast.error('Error adding customer');
+    } finally {
+      setCustomerLoading(false);
+    }
+  };
+
+  const handleCreateBankAccount = async (e) => {
+    e.preventDefault();
+    setBankLoading(true);
+    try {
+      const response = await fetch('/api/bank-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newBankData),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Bank account added successfully');
+        await fetchBankAccounts(); // Refresh list
+
+        // Auto-select the new account
+        setBillData(prev => ({
+          ...prev,
+          bankAccountId: data.account._id
+        }));
+
+        setIsBankModalOpen(false);
+        setNewBankData({
+          accountName: '',
+          accountNumber: '',
+          ifscCode: '',
+          upiId: '',
+          openingBalance: 0,
+        });
+      } else {
+        toast.error(data.error || 'Failed to add bank account');
+      }
+    } catch (error) {
+      toast.error('Error adding bank account');
+    } finally {
+      setBankLoading(false);
     }
   };
 
@@ -344,6 +469,15 @@ export default function BillingPage() {
     doc.setFont(undefined, 'bold');
     doc.text(`Due: ₹${transaction.dueAmount}`, 138, finalY + 12, { align: 'right' });
 
+    // Payment Info
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    const paymentInfoY = finalY + 20;
+    doc.text(`Payment Mode: ${transaction.paymentMode}`, 10, paymentInfoY);
+    if (transaction.paymentMode === 'ONLINE' && transaction.bankAccountId?.accountName) {
+      doc.text(`Account: ${transaction.bankAccountId.accountName}`, 10, paymentInfoY + 5);
+    }
+
     // Footer
     doc.setFont(undefined, 'normal');
     doc.setFontSize(8);
@@ -395,9 +529,8 @@ export default function BillingPage() {
                   size="lg"
                   onClick={startListening}
                   disabled={listening || voiceLoading}
-                  className={`w-32 h-32 rounded-full ${
-                    listening ? 'bg-red-600 animate-pulse' : 'bg-green-600'
-                  }`}
+                  className={`w-32 h-32 rounded-full ${listening ? 'bg-red-600 animate-pulse' : 'bg-green-600'
+                    }`}
                 >
                   {voiceLoading ? (
                     <Loader2 className="w-12 h-12 animate-spin" />
@@ -428,22 +561,89 @@ export default function BillingPage() {
                 {/* Customer Details */}
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t('customerName')}</Label>
-                    <Input
-                      list="customers-list"
-                      placeholder="Customer name"
-                      value={billData.customerName}
-                      onChange={(e) => {
-                        const name = e.target.value;
-                        const customer = customers.find((c) => c.name === name);
-                        setBillData({
-                          ...billData,
-                          customerName: name,
-                          customerId: customer?._id || '',
-                        });
-                      }}
-                      required
-                    />
+                    <Label>Shop Name</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        list="customers-list"
+                        placeholder="Shop name"
+                        value={billData.customerName}
+                        onChange={(e) => {
+                          const name = e.target.value;
+                          const customer = customers.find((c) => c.name === name);
+                          setBillData({
+                            ...billData,
+                            customerName: name,
+                            customerId: customer?._id || '',
+                          });
+                        }}
+                        required
+                        className="flex-1"
+                      />
+                      <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
+                        <DialogTrigger asChild>
+                          <Button type="button" variant="outline" size="icon" title="Add New Customer">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Add New Shop</DialogTitle>
+                            <DialogDescription>
+                              Enter shop details here.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
+                                <Building2 className="w-4 h-4 text-green-600" />
+                                Shop Name
+                              </Label>
+                              <Input
+                                id="name"
+                                placeholder="Enter shop name"
+                                value={newCustomerData.name}
+                                onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
+                                className="border-green-100 focus:border-green-500"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
+                                <Phone className="w-4 h-4 text-green-600" />
+                                Mobile
+                              </Label>
+                              <Input
+                                id="mobile"
+                                type="tel"
+                                placeholder="Mobile number"
+                                value={newCustomerData.mobile}
+                                onChange={(e) => setNewCustomerData({ ...newCustomerData, mobile: e.target.value })}
+                                className="border-green-100 focus:border-green-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-green-600" />
+                                Address
+                              </Label>
+                              <Input
+                                id="address"
+                                placeholder="Shop address"
+                                value={newCustomerData.address}
+                                onChange={(e) => setNewCustomerData({ ...newCustomerData, address: e.target.value })}
+                                className="border-green-100 focus:border-green-500"
+                              />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button type="button" onClick={handleCreateCustomer} disabled={customerLoading} className="bg-green-600 w-full">
+                              {customerLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                              Add Shop
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                     <datalist id="customers-list">
                       {customers.map((customer) => (
                         <option key={customer._id} value={customer.name} />
@@ -452,14 +652,83 @@ export default function BillingPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>Payment Mode</Label>
-                    <select
-                      className="w-full h-10 px-3 py-2 border rounded-md"
-                      value={billData.paymentMode}
-                      onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="ONLINE">Online</option>
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        className="w-full h-10 px-3 py-2 border rounded-md"
+                        value={billData.paymentMode}
+                        onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
+                      >
+                        <option value="CASH">Cash</option>
+                        <option value="ONLINE">Online</option>
+                      </select>
+                      {billData.paymentMode === 'ONLINE' && (
+                        <div className="flex-1 flex gap-2">
+                          <select
+                            className="flex-1 h-10 px-3 py-2 border rounded-md"
+                            value={billData.bankAccountId}
+                            onChange={(e) => setBillData({ ...billData, bankAccountId: e.target.value })}
+                            required
+                          >
+                            <option value="">Select Account</option>
+                            {bankAccounts.map((acc) => (
+                              <option key={acc._id} value={acc._id}>{acc.accountName}</option>
+                            ))}
+                          </select>
+                          <Dialog open={isBankModalOpen} onOpenChange={setIsBankModalOpen}>
+                            <DialogTrigger asChild>
+                              <Button type="button" variant="outline" size="icon" title="Add New Bank Account">
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Add New Bank Account</DialogTitle>
+                                <DialogDescription>
+                                  Enter bank account or wallet details.
+                                </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                  <Label>Account Name (e.g., PhonePe, SBI)</Label>
+                                  <Input
+                                    value={newBankData.accountName}
+                                    onChange={(e) => setNewBankData({ ...newBankData, accountName: e.target.value })}
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Account Number (Optional)</Label>
+                                  <Input
+                                    value={newBankData.accountNumber}
+                                    onChange={(e) => setNewBankData({ ...newBankData, accountNumber: e.target.value })}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>IFSC Code (Optional)</Label>
+                                  <Input
+                                    value={newBankData.ifscCode}
+                                    onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })}
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>UPI ID (Optional)</Label>
+                                  <Input
+                                    value={newBankData.upiId}
+                                    onChange={(e) => setNewBankData({ ...newBankData, upiId: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                              <DialogFooter>
+                                <Button type="button" onClick={handleCreateBankAccount} disabled={bankLoading} className="bg-green-600 w-full">
+                                  {bankLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                                  Add Account
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -558,19 +827,21 @@ export default function BillingPage() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full bg-green-600" disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      {t('generateBill')}
-                    </>
-                  )}
-                </Button>
+                <div className="flex justify-center pt-4">
+                  <Button type="submit" className="w-40 bg-green-600" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                </div>
               </form>
             </CardContent>
           </Card>
