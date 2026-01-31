@@ -1,7 +1,5 @@
 import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
-import connectDB from '@/lib/mongodb';
-import User from '@/lib/models/User';
+
 
 export const authOptions = {
   providers: [
@@ -13,27 +11,19 @@ export const authOptions = {
       },
       async authorize(credentials) {
         try {
-          await connectDB();
-          
-          const user = await User.findOne({ email: credentials.email });
-          
-          if (!user) {
-            throw new Error('No user found with this email');
+          const res = await fetch(`${process.env.BACKEND_URL}/api/auth/verify-credentials`, {
+            method: 'POST',
+            body: JSON.stringify(credentials),
+            headers: { "Content-Type": "application/json" }
+          });
+
+          const user = await res.json();
+
+          if (!res.ok) {
+            throw new Error(user.error || 'Authentication failed');
           }
 
-          const isValid = await bcrypt.compare(credentials.password, user.password);
-          
-          if (!isValid) {
-            throw new Error('Invalid password');
-          }
-
-          return {
-            id: user._id.toString(),
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            ownerId: user.ownerId ? user.ownerId.toString() : user._id.toString(),
-          };
+          return user;
         } catch (error) {
           console.error('Auth error:', error);
           return null;
