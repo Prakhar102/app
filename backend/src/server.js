@@ -26,6 +26,10 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/products', productRoutes);
+import transactionRoutes from './routes/transactions.js';
+import bankAccountRoutes from './routes/bankAccounts.js';
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/bank-accounts', bankAccountRoutes);
 
 
 const PORT = process.env.PORT || 5000;

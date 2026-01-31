@@ -50,6 +50,10 @@ const TransactionSchema = new mongoose.Schema({
     enum: ['CASH', 'ONLINE'],
     default: 'CASH',
   },
+  bankAccountId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BankAccount',
+  },
   description: {
     type: String,
     default: '',
