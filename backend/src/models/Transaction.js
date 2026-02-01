@@ -93,6 +93,9 @@ const TransactionSchema = new mongoose.Schema({
       default: '',
     },
   }],
+  invoiceNumber: {
+    type: Number,
+  },
 }, {
   timestamps: true,
 });

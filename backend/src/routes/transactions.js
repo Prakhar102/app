@@ -32,8 +32,15 @@ router.post('/', protect, async (req, res) => {
             description,
             labourCharges,
             vehicleNumber,
-            isDelivered
+            isDelivered,
+            date
         } = req.body;
+
+        let invoiceNumber = null;
+        if (type === 'SALE') {
+            const saleCount = await Transaction.countDocuments({ ownerId, type: 'SALE' });
+            invoiceNumber = (saleCount % 3000) + 1;
+        }
 
         // Create Transaction
         const transaction = await Transaction.create({
@@ -53,7 +60,8 @@ router.post('/', protect, async (req, res) => {
             bankAccountId: paymentMode === 'ONLINE' ? bankAccountId : null,
             payments: payments || [],
             description,
-            date: new Date()
+            invoiceNumber,
+            date: date ? new Date(date) : new Date()
         });
 
         console.log('New Transaction Created:', {
@@ -131,6 +139,73 @@ router.get('/customer/:customerId', protect, async (req, res) => {
         res.json({ success: true, transactions });
     } catch (error) {
         console.error('Get customer transactions error:', error);
+        res.status(500).json({ error: error.message || 'Internal server error' });
+    }
+});
+
+// Update a specific transaction (e.g., clear due for a specific bill)
+router.patch('/:id', protect, async (req, res) => {
+    try {
+        const ownerId = getOwnerId(req.user);
+        const { id } = req.params;
+        const { payments, description, date } = req.body;
+
+        const transaction = await Transaction.findOne({ _id: id, ownerId });
+        if (!transaction) {
+            return res.status(404).json({ error: 'Transaction not found' });
+        }
+
+        const oldDue = transaction.dueAmount;
+
+        // Handle new payments
+        if (payments && Array.isArray(payments) && payments.length > 0) {
+            let additionalPaid = 0;
+            const newPaymentEntries = payments.map(p => {
+                const amount = parseFloat(p.amount) || 0;
+                additionalPaid += amount;
+                return {
+                    mode: p.mode || 'CASH',
+                    amount: amount,
+                    bankAccountId: p.mode === 'ONLINE' ? p.bankAccountId : null,
+                    payerName: p.mode === 'ONLINE' ? p.payerName : null,
+                    date: date ? new Date(date) : new Date()
+                };
+            });
+
+            transaction.payments = [...(transaction.payments || []), ...newPaymentEntries];
+            transaction.paidAmount = (transaction.paidAmount || 0) + additionalPaid;
+            transaction.dueAmount = Math.max(0, transaction.totalAmount - transaction.paidAmount);
+
+            // Auto-set SPLIT mode if it wasn't already and we now have multiple modes or entries
+            if (transaction.payments.length > 1) {
+                transaction.paymentMode = 'SPLIT';
+            } else if (newPaymentEntries.length === 1 && !transaction.payments.length) {
+                transaction.paymentMode = newPaymentEntries[0].mode;
+                transaction.bankAccountId = newPaymentEntries[0].bankAccountId;
+            }
+        }
+
+        if (description) transaction.description = description;
+        if (date) transaction.date = new Date(date);
+
+        await transaction.save();
+
+        // Update Customer Total Due
+        const dueChange = transaction.dueAmount - oldDue;
+        if (transaction.customerId && dueChange !== 0) {
+            await Customer.findByIdAndUpdate(transaction.customerId, {
+                $inc: { totalDue: dueChange }
+            });
+        }
+
+        const populatedTransaction = await Transaction.findById(transaction._id)
+            .populate('customerId')
+            .populate('bankAccountId', 'accountName')
+            .populate('payments.bankAccountId', 'accountName');
+
+        res.json({ success: true, transaction: populatedTransaction });
+    } catch (error) {
+        console.error('Update transaction error:', error);
         res.status(500).json({ error: error.message || 'Internal server error' });
     }
 });

@@ -22,7 +22,7 @@ export default function HomePage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">{t('loading')}</p>
         </div>
       </div>
     );
@@ -37,7 +37,7 @@ export default function HomePage() {
             Smart Khaad Manager
           </h1>
           <p className="text-xl text-gray-600 mb-2">
-            खाद दुकान के लिए स्मार्ट POS सिस्टम
+            {t('posSystem')}
           </p>
           <p className="text-lg text-gray-500 mb-8">
             AI Voice Assistant | Inventory | Ledger | Reports
@@ -63,7 +63,7 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
                 <Mic className="w-6 h-6 text-green-600" />
               </div>
-              <CardTitle>AI Voice Assistant</CardTitle>
+              <CardTitle>{t('voiceAssistant')}</CardTitle>
               <CardDescription>
                 बोलकर बिल बनाएं - "राजू को 10 यूरिया दिया 5000 में"
               </CardDescription>
@@ -75,9 +75,9 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
                 <ShoppingCart className="w-6 h-6 text-blue-600" />
               </div>
-              <CardTitle>Smart Billing</CardTitle>
+              <CardTitle>{t('smartBilling')}</CardTitle>
               <CardDescription>
-                Fast POS billing with PDF invoice generation
+                {t('fastBilling')}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -87,9 +87,9 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
                 <Package className="w-6 h-6 text-purple-600" />
               </div>
-              <CardTitle>Inventory Management</CardTitle>
+              <CardTitle>{t('inventory')}</CardTitle>
               <CardDescription>
-                स्टॉक ट्रैकिंग with low stock alerts
+                {t('stockTracking')}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -99,9 +99,9 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mb-4">
                 <Users className="w-6 h-6 text-orange-600" />
               </div>
-              <CardTitle>Customer Ledger</CardTitle>
+              <CardTitle>{t('customerBalances')}</CardTitle>
               <CardDescription>
-                उधार हिसाब किताब - Due tracking made easy
+                {t('dueTracking')}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -111,7 +111,7 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
                 <FileText className="w-6 h-6 text-red-600" />
               </div>
-              <CardTitle>Day Book (रोजनामचा)</CardTitle>
+              <CardTitle>{t('dayBook')}</CardTitle>
               <CardDescription>
                 Daily reports with cash/online breakdown
               </CardDescription>
@@ -123,9 +123,9 @@ export default function HomePage() {
               <div className="w-12 h-12 bg-teal-100 rounded-lg flex items-center justify-center mb-4">
                 <TrendingUp className="w-6 h-6 text-teal-600" />
               </div>
-              <CardTitle>Staff Management</CardTitle>
+              <CardTitle>{t('staffManagement')}</CardTitle>
               <CardDescription>
-                Create staff accounts with role-based access
+                {t('manageStaffAccounts')}
               </CardDescription>
             </CardHeader>
           </Card>
@@ -133,7 +133,7 @@ export default function HomePage() {
 
         {/* Footer */}
         <div className="text-center mt-16 text-gray-500 text-sm">
-          <p>© 2025 Smart Khaad Manager. Built with ❤️ for fertilizer shop owners.</p>
+          <p>© 2025 Smart Khaad Manager. {t('builtWith')}.</p>
         </div>
       </div>
     </div>

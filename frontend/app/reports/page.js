@@ -43,7 +43,7 @@ export default function ReportsPage() {
         calculateStats(data.transactions);
       }
     } catch (error) {
-      toast.error('Failed to fetch transactions');
+      toast.error(t('failedFetchTransactions'));
     } finally {
       setLoading(false);
     }
@@ -61,10 +61,17 @@ export default function ReportsPage() {
     transactions.forEach((txn) => {
       if (txn.type === 'SALE') {
         stats.totalSales += txn.totalAmount;
-        if (txn.paymentMode === 'CASH') {
-          stats.totalCash += txn.paidAmount;
+        if (txn.paymentMode === 'SPLIT' && txn.payments) {
+          txn.payments.forEach(p => {
+            if (p.mode === 'CASH') stats.totalCash += p.amount;
+            else stats.totalOnline += p.amount;
+          });
         } else {
-          stats.totalOnline += txn.paidAmount;
+          if (txn.paymentMode === 'CASH') {
+            stats.totalCash += txn.paidAmount;
+          } else {
+            stats.totalOnline += txn.paidAmount;
+          }
         }
       } else if (txn.type === 'EXPENSE') {
         stats.totalExpenses += txn.totalAmount;
@@ -101,7 +108,7 @@ export default function ReportsPage() {
   };
 
   const exportToCSV = () => {
-    const headers = ['Date', 'Type', 'Customer', 'Amount', 'Paid', 'Due', 'Payment Mode'];
+    const headers = [t('date'), t('type'), t('customer'), t('amount'), t('paid'), t('due'), t('paymentMode')];
     const rows = transactions.map((txn) => [
       formatDate(txn.date),
       txn.type,
@@ -109,7 +116,7 @@ export default function ReportsPage() {
       txn.totalAmount,
       txn.paidAmount,
       txn.dueAmount,
-      txn.paymentMode,
+      txn.paidAmount === 0 ? t('fullCredit') : txn.paymentMode,
     ]);
 
     const csvContent = [
@@ -123,7 +130,7 @@ export default function ReportsPage() {
     a.href = url;
     a.download = `report_${dateRange.startDate}_to_${dateRange.endDate}.csv`;
     a.click();
-    toast.success('Report exported!');
+    toast.success(t('reportExported'));
   };
 
   const isOwner = session?.user?.role === 'OWNER';
@@ -142,12 +149,12 @@ export default function ReportsPage() {
               <Calendar className="w-5 h-5" />
               {t('dayBook')} / Roznamcha
             </CardTitle>
-            <CardDescription>Select date range to view transactions</CardDescription>
+            <CardDescription>{t('selectDateRange')}</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Start Date</Label>
+                <Label>{t('startDate')}</Label>
                 <Input
                   type="date"
                   value={dateRange.startDate}
@@ -155,7 +162,7 @@ export default function ReportsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>End Date</Label>
+                <Label>{t('endDate')}</Label>
                 <Input
                   type="date"
                   value={dateRange.endDate}
@@ -165,7 +172,7 @@ export default function ReportsPage() {
               <div className="flex items-end">
                 <Button onClick={exportToCSV} variant="outline" className="w-full">
                   <Download className="w-4 h-4 mr-2" />
-                  Export CSV
+                  {t('exportCsv')}
                 </Button>
               </div>
             </div>
@@ -176,7 +183,7 @@ export default function ReportsPage() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('totalSales')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalSales)}</div>
@@ -218,7 +225,7 @@ export default function ReportsPage() {
             <CardContent className="py-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-orange-600 font-semibold">Total Expenses</p>
+                  <p className="text-sm text-orange-600 font-semibold">{t('totalExpenses')}</p>
                   <p className="text-2xl font-bold text-orange-700">{formatCurrency(stats.totalExpenses)}</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-orange-600" />
@@ -230,14 +237,14 @@ export default function ReportsPage() {
         {/* Transactions List */}
         <Card>
           <CardHeader>
-            <CardTitle>Transaction History</CardTitle>
-            <CardDescription>{transactions.length} transactions found</CardDescription>
+            <CardTitle>{t('transactionHistory')}</CardTitle>
+            <CardDescription>{transactions.length} {t('found')}</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-center py-8 text-gray-500">Loading...</p>
+              <p className="text-center py-8 text-gray-500">{t('loading')}</p>
             ) : transactions.length === 0 ? (
-              <p className="text-center py-8 text-gray-500">No transactions found for this date range</p>
+              <p className="text-center py-8 text-gray-500">{t('noTransactions')}</p>
             ) : (
               <div className="space-y-3">
                 {transactions.map((txn) => (
@@ -250,37 +257,45 @@ export default function ReportsPage() {
                               txn.type === 'SALE'
                                 ? 'default'
                                 : txn.type === 'EXPENSE'
-                                ? 'destructive'
-                                : 'secondary'
+                                  ? 'destructive'
+                                  : 'secondary'
                             }
                           >
                             {txn.type}
                           </Badge>
-                          <span className="font-semibold">{txn.customerName || 'Walk-in'}</span>
-                          {txn.paymentMode && (
+                          <span className="font-semibold">{txn.customerName || t('walkIn')}</span>
+                          {txn.type === 'SALE' ? (
+                            txn.paidAmount === 0 ? (
+                              <Badge variant="destructive" className="bg-red-600">{t('fullCredit')}</Badge>
+                            ) : (
+                              <Badge variant="outline" className={txn.dueAmount > 0 ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-green-50 text-green-700 border-green-200"}>
+                                {txn.paymentMode}
+                              </Badge>
+                            )
+                          ) : txn.paymentMode && (
                             <Badge variant="outline">{txn.paymentMode}</Badge>
                           )}
                         </div>
                         <div className="grid grid-cols-4 gap-4 mt-2 text-sm">
                           <div>
-                            <p className="text-gray-600">Date</p>
+                            <p className="text-gray-600">{t('date')}</p>
                             <p className="font-medium">{formatDate(txn.date)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600">Total</p>
+                            <p className="text-gray-600">{t('total')}</p>
                             <p className="font-medium text-green-600">{formatCurrency(txn.totalAmount)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600">Paid</p>
+                            <p className="text-gray-600">{t('paid')}</p>
                             <p className="font-medium">{formatCurrency(txn.paidAmount)}</p>
                           </div>
                           <div>
-                            <p className="text-gray-600">Due</p>
+                            <p className="text-gray-600">{t('due')}</p>
                             <p className="font-medium text-orange-600">{formatCurrency(txn.dueAmount)}</p>
                           </div>
                         </div>
                         {txn.description && (
-                          <p className="text-sm text-gray-600 mt-2">Note: {txn.description}</p>
+                          <p className="text-sm text-gray-600 mt-2">{t('note')}: {txn.description}</p>
                         )}
                       </div>
                     </div>

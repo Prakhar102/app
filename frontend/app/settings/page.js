@@ -17,7 +17,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [staff, setStaff] = useState([]);
   const [showStaffForm, setShowStaffForm] = useState(false);
-  
+
   const [shopData, setShopData] = useState({
     shopName: '',
     address: '',
@@ -47,7 +47,7 @@ export default function SettingsPage() {
         setShopData(data.user.shopConfig);
       }
     } catch (error) {
-      toast.error('Failed to fetch settings');
+      toast.error(t('failedFetchSettings'));
     }
   };
 
@@ -76,12 +76,12 @@ export default function SettingsPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Settings updated successfully!');
+        toast.success(t('settingsUpdated'));
       } else {
-        toast.error('Failed to update settings');
+        toast.error(t('failedUpdateSettings'));
       }
     } catch (error) {
-      toast.error('Error updating settings');
+      toast.error(t('errorUpdatingSettings'));
     } finally {
       setLoading(false);
     }
@@ -100,15 +100,15 @@ export default function SettingsPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Staff account created successfully!');
+        toast.success(t('staffCreated'));
         setStaffData({ name: '', email: '', mobile: '', password: '' });
         setShowStaffForm(false);
         fetchStaff();
       } else {
-        toast.error(data.error || 'Failed to create staff account');
+        toast.error(data.error || t('failedCreateStaff'));
       }
     } catch (error) {
-      toast.error('Error creating staff account');
+      toast.error(t('errorCreatingStaff'));
     } finally {
       setLoading(false);
     }
@@ -121,7 +121,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">{t('settings')}</h1>
-          <p className="text-gray-600 mt-1">Manage your shop configuration and staff</p>
+          <p className="text-gray-600 mt-1">{t('manageShop')}</p>
         </div>
 
         {/* Shop Configuration */}
@@ -129,9 +129,9 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Store className="w-5 h-5" />
-              Shop Configuration
+              {t('shopConfig')}
             </CardTitle>
-            <CardDescription>Update your shop details (appears on invoice)</CardDescription>
+            <CardDescription>{t('updateShopDetails')}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleShopUpdate} className="space-y-4">
@@ -139,7 +139,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label>{t('shopName')}</Label>
                   <Input
-                    placeholder="Your shop name"
+                    placeholder={t('enterYourShopName')}
                     value={shopData.shopName}
                     onChange={(e) => setShopData({ ...shopData, shopName: e.target.value })}
                     required
@@ -148,7 +148,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label>{t('gstNumber')}</Label>
                   <Input
-                    placeholder="GST Number (optional)"
+                    placeholder={t('gstOptional')}
                     value={shopData.gstNumber}
                     onChange={(e) => setShopData({ ...shopData, gstNumber: e.target.value })}
                   />
@@ -156,13 +156,13 @@ export default function SettingsPage() {
                 <div className="space-y-2 md:col-span-2">
                   <Label>{t('address')}</Label>
                   <Input
-                    placeholder="Shop address"
+                    placeholder={t('shopAddress')}
                     value={shopData.address}
                     onChange={(e) => setShopData({ ...shopData, address: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">
-                  <Label>Logo URL (Optional)</Label>
+                  <Label>{t('logoUrlOptional')}</Label>
                   <Input
                     type="url"
                     placeholder="https://example.com/logo.png"
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Updating...
+                    {t('updating')}
                   </>
                 ) : (
                   t('updateSettings')
@@ -193,9 +193,9 @@ export default function SettingsPage() {
                 <div>
                   <CardTitle className="flex items-center gap-2">
                     <Users className="w-5 h-5" />
-                    Staff Management
+                    {t('staffManagement')}
                   </CardTitle>
-                  <CardDescription>Create and manage staff accounts</CardDescription>
+                  <CardDescription>{t('manageStaffAccounts')}</CardDescription>
                 </div>
                 <Button onClick={() => setShowStaffForm(!showStaffForm)} className="bg-green-600">
                   {t('createStaff')}
@@ -206,20 +206,20 @@ export default function SettingsPage() {
               {/* Create Staff Form */}
               {showStaffForm && (
                 <div className="border rounded-lg p-4 bg-gray-50">
-                  <h3 className="font-semibold mb-4">Create New Staff Account</h3>
+                  <h3 className="font-semibold mb-4">{t('createNewStaffAccount')}</h3>
                   <form onSubmit={handleStaffCreate} className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Name</Label>
+                        <Label>{t('name')}</Label>
                         <Input
-                          placeholder="Staff name"
+                          placeholder={t('enterStaffName')}
                           value={staffData.name}
                           onChange={(e) => setStaffData({ ...staffData, name: e.target.value })}
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Email</Label>
+                        <Label>{t('email')}</Label>
                         <Input
                           type="email"
                           placeholder="staff@example.com"
@@ -229,7 +229,7 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Mobile</Label>
+                        <Label>{t('mobile')}</Label>
                         <Input
                           type="tel"
                           placeholder="9876543210"
@@ -239,10 +239,10 @@ export default function SettingsPage() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Password</Label>
+                        <Label>{t('password')}</Label>
                         <Input
                           type="password"
-                          placeholder="Password"
+                          placeholder={t('password')}
                           value={staffData.password}
                           onChange={(e) => setStaffData({ ...staffData, password: e.target.value })}
                           required
@@ -251,14 +251,14 @@ export default function SettingsPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button type="submit" disabled={loading} className="bg-green-600">
-                        Create Staff
+                        {t('createStaff')}
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
                         onClick={() => setShowStaffForm(false)}
                       >
-                        Cancel
+                        {t('cancel')}
                       </Button>
                     </div>
                   </form>
@@ -267,9 +267,9 @@ export default function SettingsPage() {
 
               {/* Staff List */}
               <div className="space-y-3">
-                <h3 className="font-semibold">Staff Members ({staff.length})</h3>
+                <h3 className="font-semibold">{t('staffMembers')} ({staff.length})</h3>
                 {staff.length === 0 ? (
-                  <p className="text-gray-500 text-sm">No staff members added yet</p>
+                  <p className="text-gray-500 text-sm">{t('noProducts')}</p>
                 ) : (
                   staff.map((member) => (
                     <div key={member._id} className="border rounded-lg p-4">
@@ -277,7 +277,7 @@ export default function SettingsPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="font-semibold">{member.name}</p>
-                            <Badge variant="secondary">Staff</Badge>
+                            <Badge variant="secondary">{t('staff')}</Badge>
                           </div>
                           <p className="text-sm text-gray-600 mt-1">{member.email}</p>
                           <p className="text-sm text-gray-600">{member.mobile}</p>
@@ -294,20 +294,20 @@ export default function SettingsPage() {
         {/* User Info */}
         <Card>
           <CardHeader>
-            <CardTitle>Account Information</CardTitle>
+            <CardTitle>{t('accountInfo')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div>
-                <p className="text-sm text-gray-600">Name</p>
+                <p className="text-sm text-gray-600">{t('name')}</p>
                 <p className="font-semibold">{session?.user?.name}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Email</p>
+                <p className="text-sm text-gray-600">{t('email')}</p>
                 <p className="font-semibold">{session?.user?.email}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-600">Role</p>
+                <p className="text-sm text-gray-600">{t('role')}</p>
                 <Badge variant={isOwner ? 'default' : 'secondary'}>
                   {session?.user?.role}
                 </Badge>

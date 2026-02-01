@@ -7,9 +7,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, Package, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSession } from 'next-auth/react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Table,
   TableBody,
@@ -18,10 +19,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function InventoryPage() {
   const { t } = useLanguage();
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const filter = searchParams.get('filter');
+
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -34,6 +45,15 @@ export default function InventoryPage() {
     unit: 'Kg',
     lowStockThreshold: 10,
   });
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const toggleGroup = (key) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
 
   useEffect(() => {
     fetchProducts();
@@ -45,9 +65,20 @@ export default function InventoryPage() {
       const data = await response.json();
       if (data.success) {
         setProducts(data.products);
+
+        // Auto-expand groups with low stock if filter is active
+        if (searchParams.get('filter') === 'low-stock') {
+          const lowStockGroups = {};
+          data.products.forEach(p => {
+            if (p.qty <= p.lowStockThreshold) {
+              lowStockGroups[p.itemName.trim().toLowerCase()] = true;
+            }
+          });
+          setExpandedGroups(lowStockGroups);
+        }
       }
     } catch (error) {
-      toast.error('Failed to fetch products');
+      toast.error(t('failedFetchProducts'));
     }
   };
 
@@ -69,14 +100,14 @@ export default function InventoryPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success(editingProduct ? 'Product updated!' : 'Product added!');
+        toast.success(editingProduct ? t('productUpdated') : t('productAdded'));
         fetchProducts();
         resetForm();
       } else {
-        toast.error(data.error || 'Failed to save product');
+        toast.error(data.error || t('failedSaveProduct'));
       }
     } catch (error) {
-      toast.error('Error saving product');
+      toast.error(t('errorSavingProduct'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +129,7 @@ export default function InventoryPage() {
   };
 
   const handleDelete = async (productId) => {
-    if (!confirm('Are you sure you want to delete this product?')) return;
+    if (!confirm(t('deleteConfirm'))) return;
 
     try {
       const response = await fetch('/api/products/delete', {
@@ -109,13 +140,13 @@ export default function InventoryPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Product deleted!');
+        toast.success(t('productDeleted'));
         fetchProducts();
       } else {
-        toast.error(data.error || 'Failed to delete product');
+        toast.error(data.error || t('failedDeleteProduct'));
       }
     } catch (error) {
-      toast.error('Error deleting product');
+      toast.error(t('errorDeletingProduct'));
     }
   };
 
@@ -149,7 +180,7 @@ export default function InventoryPage() {
         {showForm && (
           <Card>
             <CardHeader>
-              <CardTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</CardTitle>
+              <CardTitle>{editingProduct ? t('editProduct') : t('addNewProduct')}</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -164,7 +195,7 @@ export default function InventoryPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Company Name</Label>
+                    <Label>{t('companyName')}</Label>
                     <Input
                       placeholder="e.g., IFFCO, TATA"
                       value={formData.company}
@@ -175,9 +206,10 @@ export default function InventoryPage() {
                     <Label>{t('quantity')}</Label>
                     <Input
                       type="number"
-                      placeholder="Stock quantity"
+                      placeholder={t('stockQuantity')}
                       value={formData.qty}
                       onChange={(e) => setFormData({ ...formData, qty: e.target.value })}
+                      className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
                   </div>
@@ -185,9 +217,10 @@ export default function InventoryPage() {
                     <Label>{t('rate')} (per unit)</Label>
                     <Input
                       type="number"
-                      placeholder="Price"
+                      placeholder={t('price')}
                       value={formData.rate}
                       onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+                      className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
                   </div>
@@ -205,14 +238,15 @@ export default function InventoryPage() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Low Stock Alert Threshold</Label>
+                    <Label>{t('threshold')}</Label>
                     <Input
                       type="number"
-                      placeholder="Alert when below"
+                      placeholder={t('alertBelow')}
                       value={formData.lowStockThreshold}
                       onChange={(e) =>
                         setFormData({ ...formData, lowStockThreshold: e.target.value })
                       }
+                      className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 </div>
@@ -229,19 +263,71 @@ export default function InventoryPage() {
           </Card>
         )}
 
+        <div className="flex gap-2 items-center">
+          <div className="relative group flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400 group-focus-within:text-green-600 transition-colors" />
+            </div>
+            <Input
+              type="text"
+              placeholder={t('searchInventory')}
+              className="pl-10 h-10 text-sm border-2 border-gray-100 focus:border-green-500 shadow-sm rounded-xl transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          {filter === 'low-stock' && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 shadow-sm rounded-lg"
+                    onClick={() => router.push('/inventory')}
+                  >
+                    <X className="w-5 h-5 transition-transform hover:scale-110" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{t('clearFilter')}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+
         {/* Products List */}
         <div className="grid gap-6">
           {products.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No products added yet</p>
+                <p className="text-gray-600">{t('noProducts')}</p>
               </CardContent>
             </Card>
           ) : (
             (() => {
-              // Group products by itemName (case-insensitive)
-              const grouped = products.reduce((acc, p) => {
+              // Group products by itemName (case-insensitive) after filtering
+              let filteredProducts = products.filter(p =>
+                p.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (p.company && p.company.toLowerCase().includes(searchTerm.toLowerCase()))
+              );
+
+              // Apply low stock filter if present in URL
+              if (filter === 'low-stock') {
+                // Keep groups that have at least one low stock item
+                const groupsWithLowStock = new Set(
+                  products
+                    .filter(p => p.qty <= p.lowStockThreshold)
+                    .map(p => p.itemName.trim().toLowerCase())
+                );
+                filteredProducts = filteredProducts.filter(p =>
+                  groupsWithLowStock.has(p.itemName.trim().toLowerCase())
+                );
+              }
+
+              const grouped = filteredProducts.reduce((acc, p) => {
                 const normalizedKey = p.itemName.trim().toLowerCase();
                 if (!acc[normalizedKey]) {
                   acc[normalizedKey] = {
@@ -255,80 +341,103 @@ export default function InventoryPage() {
 
               return Object.entries(grouped).map(([key, group]) => {
                 const { displayName, variants } = group;
+                const isExpanded = expandedGroups[key];
+                const totalQty = variants.reduce((sum, v) => sum + v.qty, 0);
+                const unit = variants[0]?.unit || '';
+                const hasLowStock = variants.some(v => v.qty <= v.lowStockThreshold);
+
                 return (
-                  <Card key={key} className="overflow-hidden border-2 border-gray-100 shadow-sm">
-                    <CardHeader className="bg-gray-50/50 pb-3 border-b">
+                  <Card key={key} className="overflow-hidden border-2 border-gray-100 shadow-sm transition-all duration-200 rounded-2xl hover:shadow-md">
+                    <CardHeader
+                      className={`cursor-pointer transition-colors p-3 ${isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50/50'}`}
+                      onClick={() => toggleGroup(key)}
+                    >
                       <div className="flex justify-between items-center">
-                        <div className="space-y-1">
-                          <CardTitle className="text-xl font-bold text-gray-800 uppercase tracking-tight">
-                            {displayName}
-                          </CardTitle>
-                          <CardDescription className="text-xs">
-                            {variants.length} brand variant{variants.length > 1 ? 's' : ''} available
-                          </CardDescription>
+                        <div className="flex items-center gap-3">
+                          <div className={`p-1.5 rounded-lg ${hasLowStock ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                            <Package className="w-4 h-4" />
+                          </div>
+                          <div className="space-y-1">
+                            <CardTitle className="text-lg font-bold text-gray-800 uppercase tracking-tight flex items-center gap-2">
+                              {displayName}
+                              {hasLowStock && (
+                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-black animate-pulse">
+                                  {t('lowStock')}
+                                </Badge>
+                              )}
+                            </CardTitle>
+                            <CardDescription className="text-xs font-medium">
+                              {variants.length} brand variant{variants.length > 1 ? 's' : ''} • {t('totalStock')}: <span className={hasLowStock ? 'text-red-600' : 'text-green-600'}>{totalQty} {unit}</span>
+                            </CardDescription>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
                       </div>
                     </CardHeader>
-                    <CardContent className="p-0">
-                      <Table>
-                        <TableHeader className="bg-gray-50/30">
-                          <TableRow>
-                            <TableHead className="font-bold text-gray-600">Company / Brand</TableHead>
-                            <TableHead className="font-bold text-gray-600">Current Stock</TableHead>
-                            <TableHead className="font-bold text-gray-600">Rate</TableHead>
-                            <TableHead className="font-bold text-gray-600">Total Value</TableHead>
-                            <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {variants.map((v) => (
-                            <TableRow key={v._id} className="hover:bg-gray-50/50 transition-colors">
-                              <TableCell className="font-semibold py-4">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-blue-700 uppercase">{v.company || 'Standard'}</span>
-                                  {v.qty <= v.lowStockThreshold && (
-                                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-black animate-pulse">
-                                      Low Stock
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="font-medium text-gray-700">
-                                {v.qty} <span className="text-xs text-gray-400 font-normal uppercase">{v.unit}</span>
-                              </TableCell>
-                              <TableCell className="font-medium text-gray-700">₹{v.rate}</TableCell>
-                              <TableCell className="font-bold text-green-600">₹{(v.qty * v.rate).toLocaleString()}</TableCell>
-                              <TableCell className="text-right py-4">
-                                <div className="flex justify-end gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-8 w-8 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEdit(v);
-                                    }}
-                                    title="Edit Product"
-                                  >
-                                    <Edit2 className="h-4 w-4" />
-                                  </Button>
-                                  {isOwner && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                      onClick={() => handleDelete(v._id)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </TableCell>
+                    {isExpanded && (
+                      <CardContent className="p-0 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <Table>
+                          <TableHeader className="bg-gray-50/30">
+                            <TableRow>
+                              <TableHead className="font-bold text-gray-600">{t('companyBrand')}</TableHead>
+                              <TableHead className="font-bold text-gray-600">{t('currentStock')}</TableHead>
+                              <TableHead className="font-bold text-gray-600">{t('rate')}</TableHead>
+                              <TableHead className="font-bold text-gray-600">{t('totalValue')}</TableHead>
+                              <TableHead className="text-right font-bold text-gray-600">{t('actions')}</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
+                          </TableHeader>
+                          <TableBody>
+                            {variants.map((v) => (
+                              <TableRow key={v._id} className="hover:bg-gray-50/50 transition-colors">
+                                <TableCell className="font-semibold py-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-blue-700 uppercase">{v.company || 'Standard'}</span>
+                                    {v.qty <= v.lowStockThreshold && (
+                                      <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-black animate-pulse">
+                                        {t('lowStock')}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="font-medium text-gray-700">
+                                  {v.qty} <span className="text-xs text-gray-400 font-normal uppercase">{v.unit}</span>
+                                </TableCell>
+                                <TableCell className="font-medium text-gray-700">₹{v.rate}</TableCell>
+                                <TableCell className="font-bold text-green-600">₹{(v.qty * v.rate).toLocaleString()}</TableCell>
+                                <TableCell className="text-right py-4">
+                                  <div className="flex justify-end gap-1">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-8 w-8 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEdit(v);
+                                      }}
+                                      title={t('editProduct')}
+                                    >
+                                      <Edit2 className="h-4 w-4" />
+                                    </Button>
+                                    {isOwner && (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                        onClick={() => handleDelete(v._id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </CardContent>
+                    )}
                   </Card>
                 );
               });

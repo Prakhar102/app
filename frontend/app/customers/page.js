@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import DashboardLayout from '@/components/DashboardLayout';
@@ -9,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Users, FileText, Loader2, Download, Building2, Phone, MapPin } from 'lucide-react';
+import { Plus, Users, FileText, Loader2, Download, Building2, Phone, MapPin, Search, IndianRupee, CheckCircle2 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import {
   Dialog,
@@ -26,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import PaymentCollectionModal from '@/components/PaymentCollectionModal';
+import UpdatePaymentModal from '@/components/UpdatePaymentModal';
 
 export default function CustomersPage() {
   const { t } = useLanguage();
@@ -37,7 +40,9 @@ export default function CustomersPage() {
     mobile: '',
     address: '',
     gstNumber: '',
+    dealerId: '',
   });
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Transaction History State
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -46,9 +51,31 @@ export default function CustomersPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [pdfLoadingId, setPdfLoadingId] = useState(null);
 
+  // Payment Collection State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [customerToCollect, setCustomerToCollect] = useState(null);
+
+  // Specific Bill Update State
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [transactionToUpdate, setTransactionToUpdate] = useState(null);
+
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('id');
+
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    if (highlightId && customers.length > 0) {
+      const element = document.getElementById(`customer-${highlightId}`);
+      if (element) {
+        setTimeout(() => {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    }
+  }, [highlightId, customers]);
 
   const fetchCustomers = async () => {
     try {
@@ -58,7 +85,7 @@ export default function CustomersPage() {
         setCustomers(data.customers);
       }
     } catch (error) {
-      toast.error('Failed to fetch customers');
+      toast.error(t('failedFetchCustomers'));
     }
   };
 
@@ -131,7 +158,8 @@ export default function CustomersPage() {
 
       // Invoice details
       doc.setFontSize(12);
-      doc.text('INVOICE', 74, 46, { align: 'center' });
+      const invoiceTitle = transaction.type === 'PAYMENT' ? 'PAYMENT RECEIPT' : (transaction.invoiceNumber ? `INVOICE - ${transaction.invoiceNumber}` : 'INVOICE');
+      doc.text(invoiceTitle, 74, 46, { align: 'center' });
       doc.setFontSize(9);
       doc.text(`Date: ${new Date(transaction.date).toLocaleDateString('en-IN')}`, 10, 52);
 
@@ -144,6 +172,10 @@ export default function CustomersPage() {
       if (transaction.customerId && typeof transaction.customerId === 'object') {
         if (transaction.customerId.mobile) {
           doc.text(`Mobile: ${transaction.customerId.mobile}`, 10, nextY);
+          nextY += 5;
+        }
+        if (transaction.customerId.dealerId) {
+          doc.text(`Dealer ID: ${transaction.customerId.dealerId}`, 10, nextY);
           nextY += 5;
         }
         if (transaction.customerId.address) {
@@ -231,10 +263,30 @@ export default function CustomersPage() {
       // Need to pass the last Y to payment info logic
       const finalTotalsY = currentY;
 
+      // Delivery Info
+      let deliveryInfoY = finalTotalsY + 15;
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      if (transaction.vehicleNumber) {
+        doc.text(`Vehicle No: ${transaction.vehicleNumber}`, 12, deliveryInfoY);
+        deliveryInfoY += 5;
+      }
+      const deliveryStatus = transaction.isDelivered ? 'YES' : 'NO';
+      doc.text(`Delivered: `, 12, deliveryInfoY);
+
+      if (transaction.isDelivered) {
+        doc.setTextColor(22, 163, 74); // Green
+        doc.text('YES', 30, deliveryInfoY);
+      } else {
+        doc.setTextColor(220, 0, 0); // Red 
+        doc.text('NO', 30, deliveryInfoY);
+      }
+      doc.setTextColor(0); // Reset color
+
       // Payment Info
       doc.setFontSize(9);
       doc.setFont(undefined, 'normal');
-      const paymentInfoY = finalTotalsY + 15;
+      const paymentInfoY = deliveryInfoY + 15;
 
       doc.setDrawColor(240);
       doc.setFillColor(250, 250, 250);
@@ -254,25 +306,18 @@ export default function CustomersPage() {
         doc.text(`Mode: SPLIT`, 12, paymentInfoY + 5);
         transaction.payments.forEach((p, i) => {
           const accountInfo = p.bankAccountId?.accountName ? ` (${p.bankAccountId.accountName})` : '';
-          doc.text(`- ${p.mode}: Rs. ${p.amount}${accountInfo}`, 15, paymentInfoY + 10 + (i * 5));
+          const payerInfo = p.payerName ? ` [From: ${p.payerName}]` : '';
+          doc.text(`- ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}`, 15, paymentInfoY + 10 + (i * 5));
         });
       } else {
         doc.text(`Mode: ${transaction.paymentMode}`, 12, paymentInfoY + 5);
         if (transaction.paymentMode === 'ONLINE' && transaction.bankAccountId?.accountName) {
           doc.text(`A/C: ${transaction.bankAccountId.accountName}`, 12, paymentInfoY + 10);
         }
+        if (transaction.payerName) {
+          doc.text(`From: ${transaction.payerName}`, 12, paymentInfoY + 15);
+        }
       }
-
-      // Delivery Info
-      let deliveryInfoY = paymentInfoY + 28;
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      if (transaction.vehicleNumber) {
-        doc.text(`Vehicle No: ${transaction.vehicleNumber}`, 12, deliveryInfoY);
-        deliveryInfoY += 5;
-      }
-      const deliveryStatus = transaction.isDelivered ? 'YES' : 'NO';
-      doc.text(`Delivered: ${deliveryStatus}`, 12, deliveryInfoY);
 
       // Footer
       doc.setFont(undefined, 'normal');
@@ -301,15 +346,15 @@ export default function CustomersPage() {
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Customer added!');
+        toast.success(t('customerAdded'));
         fetchCustomers();
-        setFormData({ name: '', mobile: '', address: '', gstNumber: '' });
+        setFormData({ name: '', mobile: '', address: '', gstNumber: '', dealerId: '' });
         setShowForm(false);
       } else {
-        toast.error(data.error || 'Failed to add customer');
+        toast.error(data.error || t('failedAddCustomer'));
       }
     } catch (error) {
-      toast.error('Error adding customer');
+      toast.error(t('errorAddingCustomer'));
     } finally {
       setLoading(false);
     }
@@ -326,78 +371,143 @@ export default function CustomersPage() {
         setCustomerTransactions(data.transactions);
       }
     } catch (error) {
-      toast.error('Failed to load history');
+      toast.error(t('failedLoadHistory'));
     } finally {
       setTransactionsLoading(false);
     }
   };
 
+  const handleCollectPayment = (customer) => {
+    setCustomerToCollect(customer);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleUpdateTransaction = (tx) => {
+    setTransactionToUpdate(tx);
+    setIsUpdateModalOpen(true);
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">{t('customers')}</h1>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
+          <h1 className="text-3xl font-bold text-gray-900">{t('customers')}</h1>
+          <div className="relative group w-full md:w-80">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-5 w-5 text-gray-400 group-focus-within:text-green-600 transition-colors" />
+            </div>
+            <Input
+              type="text"
+              placeholder={t('searchPlaceholder')}
+              className="pl-10 h-10 text-sm border-2 border-gray-100 focus:border-green-500 shadow-sm rounded-xl transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Add Form Removed */}
 
         {/* Customers List */}
         <div className="grid gap-4">
-          {customers.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">No customers added yet</p>
-              </CardContent>
-            </Card>
-          ) : (
-            customers.map((customer) => (
-              <Card key={customer._id}>
+          {(() => {
+            const filteredCustomers = customers.filter(customer =>
+              customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              (customer.mobile && customer.mobile.includes(searchTerm)) ||
+              (customer.address && customer.address.toLowerCase().includes(searchTerm.toLowerCase()))
+            );
+
+            if (filteredCustomers.length === 0) {
+              return (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">
+                      {searchTerm ? t('noCustomersMatch') : t('noProducts')}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            return filteredCustomers.map((customer) => (
+              <Card
+                key={customer._id}
+                id={`customer-${customer._id}`}
+                className={highlightId === customer._id ? 'animate-highlight border-orange-500 shadow-md ring-1 ring-orange-500/20 rounded-2xl' : 'transition-all duration-300 rounded-2xl border-2 border-gray-100 shadow-sm hover:shadow-md'}
+              >
                 <CardContent className="py-4">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
                         <h3 className="text-lg font-semibold">{customer.name}</h3>
                         {customer.totalDue > 0 && (
-                          <Badge variant="destructive">Due: ₹{customer.totalDue}</Badge>
+                          <Badge variant="destructive">{t('due')}: ₹{customer.totalDue}</Badge>
                         )}
                         {customer.totalDue === 0 && (
-                          <Badge className="bg-green-600">Clear</Badge>
+                          <Badge className="bg-green-600">{t('clear')}</Badge>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-4 mt-2">
                         {customer.mobile && (
                           <div>
-                            <p className="text-sm text-gray-600">Mobile</p>
+                            <p className="text-sm text-gray-600">{t('mobile')}</p>
                             <p className="font-medium">{customer.mobile}</p>
                           </div>
                         )}
                         {customer.address && (
                           <div>
-                            <p className="text-sm text-gray-600">Address</p>
+                            <p className="text-sm text-gray-600">{t('address')}</p>
                             <p className="font-medium">{customer.address}</p>
                           </div>
                         )}
                         {customer.gstNumber && (
                           <div>
-                            <p className="text-sm text-gray-600">GST Number</p>
+                            <p className="text-sm text-gray-600">{t('gstNumber')}</p>
                             <p className="font-medium">{customer.gstNumber}</p>
+                          </div>
+                        )}
+                        {customer.dealerId && (
+                          <div>
+                            <p className="text-sm text-gray-600">{t('dealerId')}</p>
+                            <p className="font-medium text-green-600">{customer.dealerId}</p>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex justify-end mt-4">
-                    <Button variant="outline" size="sm" onClick={() => loadCustomerHistory(customer)}>
+                  <div className="flex justify-end mt-4 gap-2">
+                    <Button variant="outline" size="sm" className="h-8" onClick={() => loadCustomerHistory(customer)}>
                       <FileText className="w-4 h-4 mr-2" />
-                      View Bills
+                      {t('viewBills')}
                     </Button>
                   </div>
                 </CardContent>
               </Card>
-            ))
-          )}
+            ));
+          })()}
         </div>
+
+        <PaymentCollectionModal
+          open={isPaymentModalOpen}
+          onOpenChange={setIsPaymentModalOpen}
+          customer={customerToCollect}
+          onSuccess={fetchCustomers}
+        />
+
+        <UpdatePaymentModal
+          open={isUpdateModalOpen}
+          onOpenChange={setIsUpdateModalOpen}
+          transaction={transactionToUpdate}
+          onSuccess={() => {
+            fetchCustomers();
+            if (customerToCollect) loadCustomerHistory(customerToCollect);
+            else if (transactionToUpdate?.customerId) {
+              const cust = customers.find(c => c._id === (transactionToUpdate.customerId._id || transactionToUpdate.customerId));
+              if (cust) loadCustomerHistory(cust);
+            }
+          }}
+        />
 
         {/* Transaction History Dialog */}
         <Dialog open={isHistoryOpen} onOpenChange={setIsHistoryOpen}>
@@ -406,10 +516,10 @@ export default function CustomersPage() {
               <DialogHeader>
                 <DialogTitle className="text-2xl font-bold flex items-center gap-2">
                   <FileText className="w-6 h-6 text-green-600" />
-                  Billing History - {selectedCustomer?.name}
+                  {t('billingHistory')} - {selectedCustomer?.name}
                 </DialogTitle>
                 <DialogDescription>
-                  View and manage all bills for this customer
+                  {t('historySubtitle')}
                 </DialogDescription>
               </DialogHeader>
             </div>
@@ -423,28 +533,30 @@ export default function CustomersPage() {
               ) : (
                 <div className="mt-4">
                   {customerTransactions.length === 0 ? (
-                    <p className="text-center text-gray-500 py-8">No transaction history found</p>
+                    <p className="text-center text-gray-500 py-8">{t('noHistory')}</p>
                   ) : (
                     <Table>
                       <TableHeader className="bg-gray-50">
                         <TableRow>
-                          <TableHead className="text-left w-[100px]">Date</TableHead>
-                          <TableHead className="text-left w-[180px]">Items & Labour</TableHead>
-                          <TableHead className="text-left w-[120px]">Vehicle No</TableHead>
-                          <TableHead className="text-left w-[85px]">Total</TableHead>
-                          <TableHead className="text-left w-[85px]">Paid</TableHead>
-                          <TableHead className="text-left w-[180px]">Payment Details</TableHead>
-                          <TableHead className="text-left font-bold text-red-600 w-[100px]">Pending Due</TableHead>
-                          <TableHead className="text-left w-[40px]">Bill</TableHead>
+                          <TableHead className="text-left w-[100px]">{t('date')}</TableHead>
+                          <TableHead className="text-left w-[180px]">{t('itemsLabour')}</TableHead>
+                          <TableHead className="text-left w-[120px]">{t('vehicleNo')}</TableHead>
+                          <TableHead className="text-left w-[85px]">{t('total')}</TableHead>
+                          <TableHead className="text-left w-[85px]">{t('paid')}</TableHead>
+                          <TableHead className="text-left w-[180px]">{t('paymentDetails')}</TableHead>
+                          <TableHead className="text-left font-bold text-red-600 w-[100px]">{t('pendingDue')}</TableHead>
+                          <TableHead className="text-center w-[60px]">{t('receipt')}</TableHead>
+                          <TableHead className="text-center w-[60px]">{t('pay')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {customerTransactions.map((tx) => {
-                          const itemsTotal = tx.items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+                          const isPayment = tx.type === 'PAYMENT';
+                          const itemsTotal = tx.items?.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0) || 0;
                           const displayLabour = tx.labourCharges || (tx.totalAmount > itemsTotal ? (tx.totalAmount - itemsTotal) : 0);
 
                           return (
-                            <TableRow key={tx._id} className="hover:bg-gray-50/50">
+                            <TableRow key={tx._id} className={`hover:bg-gray-50/50 ${isPayment ? 'bg-blue-50/30' : ''}`}>
                               <TableCell className="font-medium whitespace-nowrap align-middle text-left px-2">
                                 <div className="flex flex-col gap-1">
                                   <span className="text-sm">
@@ -454,13 +566,13 @@ export default function CustomersPage() {
                                       year: 'numeric'
                                     })}
                                   </span>
-                                  {tx.isDelivered !== undefined && (
+                                  {!isPayment && tx.isDelivered !== undefined && (
                                     <div className="flex justify-start pl-4">
                                       <Badge
                                         variant="outline"
                                         className={`text-[9px] py-0 px-1 ${tx.isDelivered ? 'border-green-200 text-green-600 bg-green-50/50' : 'border-red-200 text-red-600 bg-red-50/50'}`}
                                       >
-                                        {tx.isDelivered ? 'Delivered' : 'Not Delivered'}
+                                        {tx.isDelivered ? t('delivered') : t('notDelivered')}
                                       </Badge>
                                     </div>
                                   )}
@@ -468,21 +580,28 @@ export default function CustomersPage() {
                               </TableCell>
                               <TableCell className="text-left align-middle px-2">
                                 <div className="flex flex-col gap-1 py-1 items-start">
-                                  {tx.items.map((item, i) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 bg-white border-gray-200">
-                                      {item.itemName} {item.company ? `| ${item.company}` : ''} ({item.qty})
+                                  {isPayment ? (
+                                    <Badge className="bg-blue-600 hover:bg-blue-600 text-[10px] py-0 px-1.5 font-bold uppercase tracking-wider">
+                                      {t('paymentReceipt')}
                                     </Badge>
-                                  ))}
-                                  {displayLabour > 0 && (
-                                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-orange-100 text-orange-700 border-orange-200 font-bold shadow-sm">
-                                      Loading Cost: ₹{displayLabour}
-                                    </Badge>
+                                  ) : (
+                                    <>
+                                      {tx.items.map((item, i) => (
+                                        <Badge key={i} variant="outline" className="text-[10px] py-0 px-1.5 bg-white border-gray-200">
+                                          {item.itemName} {item.company ? `| ${item.company}` : ''} ({item.qty})
+                                        </Badge>
+                                      ))}
+                                      {displayLabour > 0 && (
+                                        <Badge variant="secondary" className="text-[10px] py-0 px-1.5 bg-orange-100 text-orange-700 border-orange-200 font-bold shadow-sm">
+                                          {t('loadingCost')}: ₹{displayLabour}
+                                        </Badge>
+                                      )}
+                                    </>
                                   )}
-
                                 </div>
                               </TableCell>
                               <TableCell className="text-left align-middle">
-                                {tx.vehicleNumber ? (
+                                {!isPayment && tx.vehicleNumber ? (
                                   <Badge variant="outline" className="w-fit text-[11px] py-0.5 px-2 border-blue-200 text-blue-700 bg-blue-50 font-bold uppercase tracking-wider">
                                     {tx.vehicleNumber}
                                   </Badge>
@@ -490,66 +609,88 @@ export default function CustomersPage() {
                                   <span className="text-gray-300 text-[10px]">—</span>
                                 )}
                               </TableCell>
-                              <TableCell className="text-left align-middle font-bold text-gray-900">₹{tx.totalAmount.toLocaleString()}</TableCell>
-                              <TableCell className="text-left align-middle text-green-600 font-medium">₹{tx.paidAmount.toLocaleString()}</TableCell>
+                              <TableCell className="text-left align-middle font-bold text-gray-900">
+                                {isPayment ? '-' : `₹${tx.totalAmount.toLocaleString()}`}
+                              </TableCell>
+                              <TableCell className={`text-left align-middle font-bold ${isPayment ? 'text-blue-600' : 'text-green-600'}`}>
+                                ₹{tx.paidAmount.toLocaleString()}
+                              </TableCell>
                               <TableCell className="text-left align-middle">
                                 <div className="flex flex-col">
-                                  {tx.paidAmount === 0 ? (
-                                    <Badge className="w-fit text-[10px] bg-red-50 text-red-700 border-red-200">
-                                      CREDIT (Full Due)
-                                    </Badge>
-                                  ) : tx.paymentMode === 'SPLIT' ? (
-                                    <Badge className="w-fit text-[10px] bg-purple-50 text-purple-700 border-purple-200">
-                                      SPLIT ({tx.payments.length})
-                                    </Badge>
-                                  ) : (
-                                    <Badge variant={tx.paymentMode === 'ONLINE' ? 'secondary' : 'outline'} className={`w-fit text-[10px] ${tx.paymentMode === 'ONLINE' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-700'}`}>
-                                      {tx.paymentMode}
-                                    </Badge>
-                                  )}
+                                  {(() => {
+                                    const activePayments = tx.payments?.filter(p => p.amount > 0) || [];
 
-                                  {tx.paymentMode === 'ONLINE' && (
-                                    <div className="flex flex-col mt-0.5 leading-tight">
-                                      <span
-                                        className="text-[10px] text-gray-700 font-bold"
-                                        title={tx.bankAccountId ? (JSON.stringify(tx.bankAccountId)) : 'No ID saved'}
-                                      >
-                                        {tx.bankAccountId?.accountName || (tx.bankAccountId ? 'ID: ' + String(tx.bankAccountId).substring(0, 6) : 'N/A')}
-                                      </span>
-                                      {tx.payerName && (
-                                        <span className="text-[9px] text-gray-400 italic font-medium">
-                                          • From: <span className="text-gray-500 not-italic">{tx.payerName}</span>
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
+                                    if (!isPayment && tx.paidAmount === 0) {
+                                      return (
+                                        <Badge className="w-fit text-[10px] bg-red-50 text-red-700 border-red-200">
+                                          {t('fullDue')}
+                                        </Badge>
+                                      );
+                                    }
 
-                                  {tx.paymentMode === 'SPLIT' && (
-                                    <div className="flex flex-col gap-0.5 mt-1 border-l-2 border-purple-100 pl-1.5">
-                                      {tx.payments.map((p, i) => (
-                                        <span key={i} className="text-[9px] text-gray-500 leading-tight">
-                                          • {p.mode}: ₹{p.amount} {p.bankAccountId?.accountName && `(${p.bankAccountId.accountName})`}
-                                          {p.payerName && <span className="italic ml-1 opacity-80">(From: {p.payerName})</span>}
-                                        </span>
-                                      ))}
-                                    </div>
+                                    if (activePayments.length > 1) {
+                                      return (
+                                        <div className="flex flex-col gap-1">
+                                          <Badge className="w-fit text-[10px] bg-purple-50 text-purple-700 border-purple-200">
+                                            {t('split')} ({activePayments.length})
+                                          </Badge>
+                                          <div className="flex flex-col gap-0.5 mt-1 border-l-2 border-purple-100 pl-1.5">
+                                            {activePayments.map((p, i) => (
+                                              <span key={i} className="text-[9px] text-gray-500 leading-tight">
+                                                • {p.mode}: ₹{p.amount.toLocaleString()} {p.bankAccountId?.accountName && `(${p.bankAccountId.accountName})`}
+                                                {p.payerName && <span className="italic ml-1 opacity-70">({t('from')}: {p.payerName})</span>}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+
+                                    // Single payment or fallback
+                                    const singlePay = activePayments.length === 1 ? activePayments[0] : null;
+                                    const mode = singlePay ? singlePay.mode : tx.paymentMode;
+                                    const bank = singlePay ? singlePay.bankAccountId?.accountName : tx.bankAccountId?.accountName;
+                                    const payer = singlePay ? singlePay.payerName : tx.payerName;
+
+                                    return (
+                                      <div className="flex flex-col gap-1">
+                                        <Badge variant={mode === 'ONLINE' ? 'secondary' : 'outline'} className={`w-fit text-[10px] ${mode === 'ONLINE' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-700'}`}>
+                                          {mode === 'ONLINE' ? t('online') : t('cash')}
+                                        </Badge>
+                                        {mode === 'ONLINE' && (
+                                          <div className="flex flex-col mt-0.5 leading-tight">
+                                            <span className="text-[10px] text-gray-700 font-bold">
+                                              {bank || t('onlineAccount')}
+                                            </span>
+                                            {payer && (
+                                              <span className="text-[9px] text-gray-400 italic">
+                                                • {t('from')}: {payer}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                  {isPayment && tx.description && (
+                                    <span className="text-[10px] text-gray-500 mt-1 italic">{tx.description}</span>
                                   )}
                                 </div>
                               </TableCell>
                               <TableCell className="text-left align-middle">
-                                {tx.dueAmount > 0 ? (
+                                {isPayment ? '-' : (tx.dueAmount > 0 ? (
                                   <span className="font-bold text-red-600">₹{tx.dueAmount.toLocaleString()}</span>
                                 ) : (
-                                  <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Paid full</Badge>
-                                )}
+                                  <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">{t('paidFull')}</Badge>
+                                ))}
                               </TableCell>
-                              <TableCell className="text-left align-middle">
+                              <TableCell className="text-center align-middle">
                                 <Button
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => generatePDF(tx)}
-                                  className="h-8 w-8 text-gray-500 hover:text-green-600 hover:bg-green-50"
-                                  title="Download PDF Invoice"
+                                  className={`h-8 w-8 hover:bg-opacity-80 ${isPayment ? 'text-blue-500 hover:text-blue-600 hover:bg-blue-50' : 'text-gray-500 hover:text-green-600 hover:bg-green-50'}`}
+                                  title={t('generateInvoice')}
                                   disabled={pdfLoadingId === tx._id}
                                 >
                                   {pdfLoadingId === tx._id ? (
@@ -558,6 +699,25 @@ export default function CustomersPage() {
                                     <Download className="w-4 h-4" />
                                   )}
                                 </Button>
+                              </TableCell>
+                              <TableCell className="text-center align-middle">
+                                {!isPayment && (
+                                  tx.dueAmount > 0 ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleUpdateTransaction(tx)}
+                                      className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      title={t('collectPayment')}
+                                    >
+                                      <IndianRupee className="w-4 h-4" strokeWidth={3} />
+                                    </Button>
+                                  ) : (
+                                    <div className="flex justify-center items-center h-8 w-8 text-green-600 mx-auto" title={t('paymentCompleted')}>
+                                      <CheckCircle2 className="w-5 h-5 fill-green-50" />
+                                    </div>
+                                  )
+                                )}
                               </TableCell>
                             </TableRow>
                           );

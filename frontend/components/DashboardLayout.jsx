@@ -52,9 +52,8 @@ export default function DashboardLayout({ children }) {
       <div className="flex">
         {/* Sidebar */}
         <div
-          className={`${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r transition-transform duration-300 ease-in-out`}
+          className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            } lg:translate-x-0 fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r transition-transform duration-300 ease-in-out`}
         >
           <div className="flex flex-col h-full">
             {/* Logo */}
@@ -64,7 +63,7 @@ export default function DashboardLayout({ children }) {
                 {session?.user?.name}
                 {session?.user?.role === 'STAFF' && (
                   <Badge variant="secondary" className="ml-2 text-xs">
-                    Staff
+                    {t('staff')}
                   </Badge>
                 )}
               </p>
@@ -79,11 +78,10 @@ export default function DashboardLayout({ children }) {
                   <a
                     key={item.href}
                     href={item.href}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      isActive
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
                         ? 'bg-green-50 text-green-600 font-semibold'
                         : 'text-gray-600 hover:bg-gray-100'
-                    }`}
+                      }`}
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Icon className="w-5 h-5" />

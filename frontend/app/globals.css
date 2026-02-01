@@ -139,3 +139,13 @@ code {
     @apply bg-background text-foreground;
     }
 }
+
+@layer utilities {
+  @keyframes highlight-flash {
+    0% { background-color: rgba(249, 115, 22, 0.1); border-color: rgb(249, 115, 22); transform: scale(1.01); box-shadow: 0 0 20px rgba(249, 115, 22, 0.2); }
+    100% { background-color: transparent; border-color: inherit; transform: scale(1); box-shadow: none; }
+  }
+  .animate-highlight {
+    animation: highlight-flash 3s ease-out;
+  }
+}

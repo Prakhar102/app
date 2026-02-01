@@ -26,6 +26,12 @@ const CustomerSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  dealerId: {
+    type: String,
+    default: '',
+    unique: true,
+    sparse: true,
+  },
 }, {
   timestamps: true,
 });

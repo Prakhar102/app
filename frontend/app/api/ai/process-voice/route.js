@@ -10,19 +10,12 @@ export async function POST(request) {
     }
 
     const { voiceText } = await request.json();
+    console.log('Processing voice command:', voiceText); // Debug log
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a smart assistant for a fertilizer shop POS system. Extract transaction details from voice commands in Hindi/English.
+    const apiKey = process.env.GOOGLE_API_KEY;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const systemPrompt = `You are a smart assistant for a fertilizer shop POS system. Extract transaction details from voice commands in Hindi/English.
 
 Extract:
 - type: "SALE" (default), "PURCHASE", "PAYMENT", or "EXPENSE"
@@ -40,26 +33,48 @@ Examples:
 - "Ramesh ne 2000 online diye" -> PAYMENT, customerName: "Ramesh", paidAmount: 2000, paymentMode: "ONLINE"
 - "50 Urea aaya 25000 mein" -> PURCHASE, items: [{itemName: "Urea", qty: 50}], totalAmount: 25000
 
-Return ONLY valid JSON, no explanation.`,
-          },
-          {
-            role: 'user',
-            content: voiceText,
-          },
-        ],
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
+Return ONLY valid JSON, no explanation.`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `${systemPrompt}\n\nUser Input: "${voiceText}"`
+          }]
+        }],
+        generationConfig: {
+          response_mime_type: "application/json",
+          temperature: 0.1
+        }
       }),
     });
 
     const data = await response.json();
-    const parsedData = JSON.parse(data.choices[0].message.content);
+
+    if (!response.ok) {
+      console.error('Gemini API Error Details:', JSON.stringify(data, null, 2));
+      return NextResponse.json(
+        { error: data.error?.message || 'Failed to communicate with AI service' },
+        { status: response.status }
+      );
+    }
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error('Unexpected Gemini API response format:', JSON.stringify(data, null, 2));
+      throw new Error('Invalid response format from AI service');
+    }
+
+    const parsedData = JSON.parse(data.candidates[0].content.parts[0].text);
 
     return NextResponse.json({ success: true, data: parsedData });
   } catch (error) {
-    console.error('Groq AI error:', error);
+    console.error('Gemini AI error:', error);
     return NextResponse.json(
-      { error: 'Failed to process voice command' },
+      { error: 'Failed to process voice command. ' + (error.message || '') },
       { status: 500 }
     );
   }

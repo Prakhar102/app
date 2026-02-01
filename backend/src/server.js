@@ -30,6 +30,8 @@ import transactionRoutes from './routes/transactions.js';
 import bankAccountRoutes from './routes/bankAccounts.js';
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
+import aiRoutes from './routes/ai.js';
+app.use('/api/ai', aiRoutes);
 
 
 const PORT = process.env.PORT || 5000;

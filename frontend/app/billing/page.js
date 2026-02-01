@@ -16,7 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from 'sonner';
-import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin, FileText } from 'lucide-react';
+import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin, FileText, ChevronDown } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -61,6 +61,7 @@ export default function BillingPage() {
     mobile: '',
     address: '',
     gstNumber: '',
+    dealerId: '',
   });
   const [customerLoading, setCustomerLoading] = useState(false);
 
@@ -310,13 +311,15 @@ export default function BillingPage() {
   };
 
   const updatePaymentRow = (index, field, value) => {
-    const newPayments = [...payments];
-    newPayments[index][field] = value;
-    if (field === 'mode' && value === 'CASH') {
-      newPayments[index].bankAccountId = '';
-      newPayments[index].payerName = '';
-    }
-    setPayments(newPayments);
+    setPayments(prevPayments => prevPayments.map((p, i) => {
+      if (i !== index) return p;
+      const updatedPayment = { ...p, [field]: value };
+      if (field === 'mode' && value === 'CASH') {
+        updatedPayment.bankAccountId = '';
+        updatedPayment.payerName = '';
+      }
+      return updatedPayment;
+    }));
   };
 
   const calculateTotalPaid = () => {
@@ -455,7 +458,7 @@ export default function BillingPage() {
         }));
 
         setIsCustomerModalOpen(false);
-        setNewCustomerData({ name: '', mobile: '', address: '', gstNumber: '' });
+        setNewCustomerData({ name: '', mobile: '', address: '', gstNumber: '', dealerId: '' });
       } else {
         toast.error(data.error || 'Failed to add customer');
       }
@@ -535,7 +538,8 @@ export default function BillingPage() {
 
     // Invoice details
     doc.setFontSize(12);
-    doc.text('INVOICE', 74, 46, { align: 'center' });
+    const invoiceTitle = transaction.invoiceNumber ? `INVOICE - ${transaction.invoiceNumber}` : 'INVOICE';
+    doc.text(invoiceTitle, 74, 46, { align: 'center' });
     doc.setFontSize(9);
     doc.text(`Date: ${new Date(transaction.date).toLocaleDateString('en-IN')}`, 10, 52);
 
@@ -548,6 +552,10 @@ export default function BillingPage() {
     if (transaction.customerId && typeof transaction.customerId === 'object') {
       if (transaction.customerId.mobile) {
         doc.text(`Mobile: ${transaction.customerId.mobile}`, 10, nextY);
+        nextY += 5;
+      }
+      if (transaction.customerId.dealerId) {
+        doc.text(`Dealer ID: ${transaction.customerId.dealerId}`, 10, nextY);
         nextY += 5;
       }
       if (transaction.customerId.address) {
@@ -723,9 +731,9 @@ export default function BillingPage() {
         {mode === 'voice' ? (
           <Card>
             <CardHeader>
-              <CardTitle>AI Voice Assistant</CardTitle>
+              <CardTitle>{t('voiceAssistant')}</CardTitle>
               <CardDescription>
-                बोलकर बिल बनाएं - Examples: "Raju ko 10 Urea diya 5000 mein" or "500 ka chai kharcha"
+                {t('voiceDesc')}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -744,12 +752,12 @@ export default function BillingPage() {
                   )}
                 </Button>
                 <p className="text-center text-sm text-gray-600">
-                  {listening ? 'Listening...' : 'Click to speak'}
+                  {listening ? t('listening') : t('clickToSpeak')}
                 </p>
               </div>
               {voiceText && (
                 <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-semibold">You said:</p>
+                  <p className="text-sm font-semibold">{t('youSaid')}:</p>
                   <p className="text-gray-700 mt-1">{voiceText}</p>
                 </div>
               )}
@@ -758,19 +766,19 @@ export default function BillingPage() {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Create Bill</CardTitle>
-              <CardDescription>Enter bill details manually</CardDescription>
+              <CardTitle>{t('createBill')}</CardTitle>
+              <CardDescription>{t('enterBillDetails')}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleManualSubmit} className="space-y-6">
                 {/* Customer Details */}
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Shop Name</Label>
+                    <Label>{t('shopName')}</Label>
                     <div className="flex gap-2">
                       <Input
                         list="customers-list"
-                        placeholder="Shop name"
+                        placeholder={t('enterShopName')}
                         value={billData.customerName}
                         onChange={(e) => {
                           const name = e.target.value;
@@ -792,20 +800,20 @@ export default function BillingPage() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Add New Shop</DialogTitle>
+                            <DialogTitle>{t('addNewShop')}</DialogTitle>
                             <DialogDescription>
-                              Enter shop details here.
+                              {t('enterShopDetails')}
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 py-4">
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
                                 <Building2 className="w-4 h-4 text-green-600" />
-                                Shop Name
+                                {t('shopName')}
                               </Label>
                               <Input
                                 id="name"
-                                placeholder="Enter shop name"
+                                placeholder={t('enterShopName')}
                                 value={newCustomerData.name}
                                 onChange={(e) => setNewCustomerData({ ...newCustomerData, name: e.target.value })}
                                 className="border-green-100 focus:border-green-500"
@@ -815,11 +823,11 @@ export default function BillingPage() {
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
                                 <FileText className="w-4 h-4 text-green-600" />
-                                GST Number
+                                {t('gstNumber')} ({t('optional')})
                               </Label>
                               <Input
                                 id="gstNumber"
-                                placeholder="Enter GST number (optional)"
+                                placeholder={t('enterGst')}
                                 value={newCustomerData.gstNumber}
                                 onChange={(e) => setNewCustomerData({ ...newCustomerData, gstNumber: e.target.value })}
                                 className="border-green-100 focus:border-green-500"
@@ -827,13 +835,26 @@ export default function BillingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-green-600" />
+                                {t('dealerId')}
+                              </Label>
+                              <Input
+                                id="dealerId"
+                                placeholder={t('enterDealerId')}
+                                value={newCustomerData.dealerId}
+                                onChange={(e) => setNewCustomerData({ ...newCustomerData, dealerId: e.target.value })}
+                                className="border-green-100 focus:border-green-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
                                 <Phone className="w-4 h-4 text-green-600" />
-                                Mobile
+                                {t('mobile')}
                               </Label>
                               <Input
                                 id="mobile"
                                 type="tel"
-                                placeholder="Mobile number"
+                                placeholder={t('enterMobile')}
                                 value={newCustomerData.mobile}
                                 onChange={(e) => setNewCustomerData({ ...newCustomerData, mobile: e.target.value })}
                                 className="border-green-100 focus:border-green-500"
@@ -842,11 +863,11 @@ export default function BillingPage() {
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
                                 <MapPin className="w-4 h-4 text-green-600" />
-                                Address
+                                {t('address')}
                               </Label>
                               <Input
                                 id="address"
-                                placeholder="Shop address"
+                                placeholder={t('enterAddress')}
                                 value={newCustomerData.address}
                                 onChange={(e) => setNewCustomerData({ ...newCustomerData, address: e.target.value })}
                                 className="border-green-100 focus:border-green-500"
@@ -856,7 +877,7 @@ export default function BillingPage() {
                           <DialogFooter>
                             <Button type="button" onClick={handleCreateCustomer} disabled={customerLoading} className="bg-green-600 w-full">
                               {customerLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                              Add Shop
+                              {t('addShop')}
                             </Button>
                           </DialogFooter>
                         </DialogContent>
@@ -873,10 +894,10 @@ export default function BillingPage() {
                 {/* Bill Items */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <Label className="text-lg">Items</Label>
+                    <Label className="text-lg">{t('items')}</Label>
                     <Button type="button" variant="outline" size="sm" onClick={addBillItem}>
                       <Plus className="w-4 h-4 mr-1" />
-                      Add Item
+                      {t('addItem')}
                     </Button>
                   </div>
 
@@ -943,6 +964,7 @@ export default function BillingPage() {
                           placeholder="Qty"
                           value={item.qty}
                           onChange={(e) => updateBillItem(index, 'qty', e.target.value)}
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           required
                         />
                       </div>
@@ -953,6 +975,7 @@ export default function BillingPage() {
                           placeholder="Rate"
                           value={item.rate}
                           onChange={(e) => updateBillItem(index, 'rate', e.target.value)}
+                          className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           required
                         />
                       </div>
@@ -962,7 +985,7 @@ export default function BillingPage() {
                           type="number"
                           value={item.amount}
                           readOnly
-                          className="bg-gray-50"
+                          className="bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div className="col-span-1">
@@ -985,21 +1008,19 @@ export default function BillingPage() {
                 {/* Totals & Payment */}
                 <div className="border-t pt-4 space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
                   {/* Labour Charges Input */}
-                  <div className="flex items-center justify-between py-2">
-                    <Label className="text-gray-600">Labour Charges / Loading (₹)</Label>
-                    <div className="w-32">
-                      <Input
-                        type="number"
-                        placeholder="Labour"
-                        className="h-8 text-right font-medium border-gray-200"
-                        value={billData.labourCharges}
-                        onChange={(e) => setBillData({ ...billData, labourCharges: e.target.value })}
-                      />
-                    </div>
+                  <div className="flex items-center gap-3 py-2">
+                    <Label className="text-gray-600 whitespace-nowrap">Labour Cost / Loading (₹):</Label>
+                    <Input
+                      type="number"
+                      placeholder="Enter cost..."
+                      className="h-8 font-medium border-gray-200 flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      value={billData.labourCharges}
+                      onChange={(e) => setBillData({ ...billData, labourCharges: e.target.value })}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-4 py-2 border-t border-dashed border-gray-200">
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">Vehicle Number</Label>
+                      <Label className="text-xs text-gray-500">{t('vehicleNumber')}</Label>
                       <Input
                         placeholder="e.g. UP 80 AX 1234"
                         className="h-8 font-medium border-gray-200"
@@ -1008,7 +1029,7 @@ export default function BillingPage() {
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs text-gray-500">Delivered?</Label>
+                      <Label className="text-xs text-gray-500">{t('deliveredQuestion')}</Label>
                       <div className="flex gap-2 h-8 items-center">
                         <Button
                           type="button"
@@ -1017,7 +1038,7 @@ export default function BillingPage() {
                           className={`flex-1 h-7 text-xs ${billData.isDelivered ? 'bg-green-600 hover:bg-green-700' : ''}`}
                           onClick={() => setBillData({ ...billData, isDelivered: true })}
                         >
-                          Yes
+                          {t('yes')}
                         </Button>
                         <Button
                           type="button"
@@ -1026,7 +1047,7 @@ export default function BillingPage() {
                           className={`flex-1 h-7 text-xs ${!billData.isDelivered ? 'bg-red-600 hover:bg-red-700' : ''}`}
                           onClick={() => setBillData({ ...billData, isDelivered: false })}
                         >
-                          No
+                          {t('no')}
                         </Button>
                       </div>
                     </div>
@@ -1034,16 +1055,16 @@ export default function BillingPage() {
 
                   {/* 1. Total display */}
                   <div className="flex justify-between text-lg font-semibold pt-2 border-t border-dashed border-gray-200">
-                    <span>Total Bill:</span>
+                    <span>{t('totalBill')}:</span>
                     <span>₹{calculateTotal()}</span>
                   </div>
 
                   {/* 2. Payment Method selection (Move into flow) */}
                   <div className="space-y-4 pt-4 border-t border-gray-200">
                     <div className="flex items-center justify-between">
-                      <Label className="text-blue-900 font-bold">How would you like to pay?</Label>
+                      <Label className="text-blue-900 font-bold">{t('howToPay')}</Label>
                       <div className="flex items-center gap-2">
-                        <Label htmlFor="split-mode-bottom" className="text-xs cursor-pointer text-blue-600 font-medium">Split Payment?</Label>
+                        <Label htmlFor="split-mode-bottom" className="text-xs cursor-pointer text-blue-600 font-medium">{t('splitPaymentQuestion')}</Label>
                         <input
                           id="split-mode-bottom"
                           type="checkbox"
@@ -1056,28 +1077,34 @@ export default function BillingPage() {
 
                     {!isSplitPayment ? (
                       <div className="flex gap-2">
-                        <select
-                          className="flex-1 h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                          value={billData.paymentMode}
-                          onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
-                        >
-                          <option value="CASH">Cash</option>
-                          <option value="ONLINE">Online</option>
-                        </select>
+                        <div className="relative flex-1">
+                          <select
+                            className="w-full h-10 px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none cursor-pointer"
+                            value={billData.paymentMode}
+                            onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
+                          >
+                            <option value="CASH">{t('cash')}</option>
+                            <option value="ONLINE">{t('online')}</option>
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                        </div>
                         {billData.paymentMode === 'ONLINE' && (
                           <div className="flex-1 flex flex-col gap-2">
                             <div className="flex gap-2">
-                              <select
-                                className="flex-1 h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                                value={billData.bankAccountId}
-                                onChange={(e) => setBillData({ ...billData, bankAccountId: e.target.value })}
-                                required
-                              >
-                                <option value="">Select Account</option>
-                                {bankAccounts.map((acc) => (
-                                  <option key={acc._id} value={acc._id}>{acc.accountName}</option>
-                                ))}
-                              </select>
+                              <div className="relative flex-1">
+                                <select
+                                  className="w-full h-10 px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none cursor-pointer"
+                                  value={billData.bankAccountId}
+                                  onChange={(e) => setBillData({ ...billData, bankAccountId: e.target.value })}
+                                  required
+                                >
+                                  <option value="">{t('selectAccount')}</option>
+                                  {bankAccounts.map((acc) => (
+                                    <option key={acc._id} value={acc._id}>{acc.accountName}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                              </div>
                               <Dialog open={isBankModalOpen} onOpenChange={setIsBankModalOpen}>
                                 <DialogTrigger asChild>
                                   <Button type="button" variant="outline" size="icon" className="border-gray-300 hover:bg-blue-50 text-blue-600" title="Add New Bank Account">
@@ -1086,14 +1113,14 @@ export default function BillingPage() {
                                 </DialogTrigger>
                                 <DialogContent>
                                   <DialogHeader>
-                                    <DialogTitle>Add New Bank Account</DialogTitle>
+                                    <DialogTitle>{t('addNewBank')}</DialogTitle>
                                     <DialogDescription>
-                                      Enter bank account or wallet details.
+                                      {t('enterShopDetails')}
                                     </DialogDescription>
                                   </DialogHeader>
                                   <div className="space-y-4 py-4">
                                     <div className="space-y-2">
-                                      <Label>Account Name (e.g., PhonePe, SBI)</Label>
+                                      <Label>{t('bankAccountName')} (e.g., PhonePe, SBI)</Label>
                                       <Input
                                         value={newBankData.accountName}
                                         onChange={(e) => setNewBankData({ ...newBankData, accountName: e.target.value })}
@@ -1101,21 +1128,21 @@ export default function BillingPage() {
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label>Account Number (Optional)</Label>
+                                      <Label>{t('accountNumber')} ({t('optional')})</Label>
                                       <Input
                                         value={newBankData.accountNumber}
                                         onChange={(e) => setNewBankData({ ...newBankData, accountNumber: e.target.value })}
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label>IFSC Code (Optional)</Label>
+                                      <Label>{t('ifscCode')} ({t('optional')})</Label>
                                       <Input
                                         value={newBankData.ifscCode}
                                         onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })}
                                       />
                                     </div>
                                     <div className="space-y-2">
-                                      <Label>UPI ID (Optional)</Label>
+                                      <Label>{t('upiId')} ({t('optional')})</Label>
                                       <Input
                                         value={newBankData.upiId}
                                         onChange={(e) => setNewBankData({ ...newBankData, upiId: e.target.value })}
@@ -1125,14 +1152,14 @@ export default function BillingPage() {
                                   <DialogFooter>
                                     <Button type="button" onClick={handleCreateBankAccount} disabled={bankLoading} className="bg-blue-600 w-full hover:bg-blue-700">
                                       {bankLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                                      Add Account
+                                      {t('addAccount')}
                                     </Button>
                                   </DialogFooter>
                                 </DialogContent>
                               </Dialog>
                             </div>
                             <Input
-                              placeholder="From (Account Holder Name)"
+                              placeholder={t('fromHolder')}
                               className="h-10 border-gray-300 shadow-sm"
                               value={billData.payerName}
                               onChange={(e) => setBillData({ ...billData, payerName: e.target.value })}
@@ -1151,27 +1178,32 @@ export default function BillingPage() {
                                   value={p.mode}
                                   onChange={(e) => updatePaymentRow(idx, 'mode', e.target.value)}
                                 >
-                                  <option value="CASH">Cash</option>
-                                  <option value="ONLINE">Online</option>
+                                  <option value="CASH">{t('cash')}</option>
+                                  <option value="ONLINE">{t('online')}</option>
                                 </select>
                                 {p.mode === 'ONLINE' && (
-                                  <select
-                                    className="flex-1 h-9 text-sm px-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                    value={p.bankAccountId}
-                                    onChange={(e) => updatePaymentRow(idx, 'bankAccountId', e.target.value)}
-                                    required
-                                  >
-                                    <option value="">Select Account</option>
-                                    {bankAccounts.map((acc) => (
-                                      <option key={acc._id} value={acc._id}>{acc.accountName}</option>
-                                    ))}
-                                  </select>
+                                  <div className="relative flex-1">
+                                    <select
+                                      className="flex-1 h-9 text-sm px-2 pr-8 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                                      value={p.bankAccountId}
+                                      onChange={(e) => updatePaymentRow(idx, 'bankAccountId', e.target.value)}
+                                      required
+                                    >
+                                      <option value="">{t('selectAccount')}</option>
+                                      {bankAccounts.map((account) => (
+                                        <option key={account._id} value={account._id}>
+                                          {account.accountName} - {account.accountNumber.slice(-4)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                                  </div>
                                 )}
                               </div>
                               <div className="w-32">
                                 <Input
                                   type="number"
-                                  placeholder="Amount"
+                                  placeholder={t('amount')}
                                   className="h-9 text-sm border-gray-200"
                                   value={p.amount}
                                   onChange={(e) => updatePaymentRow(idx, 'amount', e.target.value)}
@@ -1192,7 +1224,7 @@ export default function BillingPage() {
                             </div>
                             {p.mode === 'ONLINE' && (
                               <Input
-                                placeholder="From Account (Payer Name)"
+                                placeholder={t('fromPayer')}
                                 className="h-8 text-xs border-gray-200 bg-white"
                                 value={p.payerName}
                                 onChange={(e) => updatePaymentRow(idx, 'payerName', e.target.value)}
@@ -1207,7 +1239,7 @@ export default function BillingPage() {
                           className="w-full h-9 text-xs font-semibold text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
                           onClick={addPaymentRow}
                         >
-                          <Plus className="w-3 h-3 mr-1" /> Add Another Payment Method
+                          <Plus className="w-3 h-3 mr-1" /> {t('addAnotherMethod')}
                         </Button>
                       </div>
                     )}
@@ -1215,14 +1247,14 @@ export default function BillingPage() {
 
                   {/* 3. Paid Amount input */}
                   <div className="space-y-2 pt-4 border-t border-gray-200">
-                    <Label className="font-bold text-gray-700">Amount Paid (₹)</Label>
+                    <Label className="font-bold text-gray-700">{t('amountPaid')} (₹)</Label>
                     <Input
                       type="number"
-                      placeholder="Amount paid"
+                      placeholder={t('amountPaid')}
                       value={isSplitPayment ? calculateTotalPaid() : billData.paidAmount}
                       onChange={(e) => setBillData({ ...billData, paidAmount: e.target.value })}
                       readOnly={isSplitPayment}
-                      className={isSplitPayment ? "bg-gray-100 font-bold" : "text-lg ring-1 ring-gray-200"}
+                      className={`${isSplitPayment ? "bg-gray-100 font-bold" : "text-lg ring-1 ring-gray-200"} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                       required
                     />
                   </div>
@@ -1241,12 +1273,12 @@ export default function BillingPage() {
                     {loading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
+                        {t('creating')}
                       </>
                     ) : (
                       <>
                         <Save className="mr-2 h-4 w-4" />
-                        Save
+                        {t('saveBill')}
                       </>
                     )}
                   </Button>
