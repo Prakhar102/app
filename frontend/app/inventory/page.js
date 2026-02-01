@@ -10,6 +10,14 @@ import { toast } from 'sonner';
 import { Plus, Edit2, Trash2, Package, AlertTriangle } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSession } from 'next-auth/react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export default function InventoryPage() {
   const { t } = useLanguage();
@@ -20,6 +28,7 @@ export default function InventoryPage() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState({
     itemName: '',
+    company: '',
     qty: '',
     rate: '',
     unit: 'Kg',
@@ -77,12 +86,15 @@ export default function InventoryPage() {
     setEditingProduct(product);
     setFormData({
       itemName: product.itemName,
+      company: product.company || '',
       qty: product.qty,
       rate: product.rate,
       unit: product.unit,
       lowStockThreshold: product.lowStockThreshold,
     });
     setShowForm(true);
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (productId) => {
@@ -110,6 +122,7 @@ export default function InventoryPage() {
   const resetForm = () => {
     setFormData({
       itemName: '',
+      company: '',
       qty: '',
       rate: '',
       unit: 'Kg',
@@ -148,6 +161,14 @@ export default function InventoryPage() {
                       value={formData.itemName}
                       onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Company Name</Label>
+                    <Input
+                      placeholder="e.g., IFFCO, TATA"
+                      value={formData.company}
+                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -209,7 +230,7 @@ export default function InventoryPage() {
         )}
 
         {/* Products List */}
-        <div className="grid gap-4">
+        <div className="grid gap-6">
           {products.length === 0 ? (
             <Card>
               <CardContent className="py-12 text-center">
@@ -218,55 +239,100 @@ export default function InventoryPage() {
               </CardContent>
             </Card>
           ) : (
-            products.map((product) => (
-              <Card key={product._id}>
-                <CardContent className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-semibold">{product.itemName}</h3>
-                        {product.qty <= product.lowStockThreshold && (
-                          <Badge variant="destructive" className="flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Low Stock
-                          </Badge>
-                        )}
+            (() => {
+              // Group products by itemName (case-insensitive)
+              const grouped = products.reduce((acc, p) => {
+                const normalizedKey = p.itemName.trim().toLowerCase();
+                if (!acc[normalizedKey]) {
+                  acc[normalizedKey] = {
+                    displayName: p.itemName, // Keep original casing for title (from first encountered)
+                    variants: []
+                  };
+                }
+                acc[normalizedKey].variants.push(p);
+                return acc;
+              }, {});
+
+              return Object.entries(grouped).map(([key, group]) => {
+                const { displayName, variants } = group;
+                return (
+                  <Card key={key} className="overflow-hidden border-2 border-gray-100 shadow-sm">
+                    <CardHeader className="bg-gray-50/50 pb-3 border-b">
+                      <div className="flex justify-between items-center">
+                        <div className="space-y-1">
+                          <CardTitle className="text-xl font-bold text-gray-800 uppercase tracking-tight">
+                            {displayName}
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            {variants.length} brand variant{variants.length > 1 ? 's' : ''} available
+                          </CardDescription>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-4 mt-2">
-                        <div>
-                          <p className="text-sm text-gray-600">Stock</p>
-                          <p className="font-semibold">
-                            {product.qty} {product.unit}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Rate</p>
-                          <p className="font-semibold">₹{product.rate}/{product.unit}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-gray-600">Value</p>
-                          <p className="font-semibold">₹{product.qty * product.rate}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="icon" onClick={() => handleEdit(product)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      {isOwner && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => handleDelete(product._id)}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <Table>
+                        <TableHeader className="bg-gray-50/30">
+                          <TableRow>
+                            <TableHead className="font-bold text-gray-600">Company / Brand</TableHead>
+                            <TableHead className="font-bold text-gray-600">Current Stock</TableHead>
+                            <TableHead className="font-bold text-gray-600">Rate</TableHead>
+                            <TableHead className="font-bold text-gray-600">Total Value</TableHead>
+                            <TableHead className="text-right font-bold text-gray-600">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {variants.map((v) => (
+                            <TableRow key={v._id} className="hover:bg-gray-50/50 transition-colors">
+                              <TableCell className="font-semibold py-4">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-blue-700 uppercase">{v.company || 'Standard'}</span>
+                                  {v.qty <= v.lowStockThreshold && (
+                                    <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-black animate-pulse">
+                                      Low Stock
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-700">
+                                {v.qty} <span className="text-xs text-gray-400 font-normal uppercase">{v.unit}</span>
+                              </TableCell>
+                              <TableCell className="font-medium text-gray-700">₹{v.rate}</TableCell>
+                              <TableCell className="font-bold text-green-600">₹{(v.qty * v.rate).toLocaleString()}</TableCell>
+                              <TableCell className="text-right py-4">
+                                <div className="flex justify-end gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-600 border-blue-100 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(v);
+                                    }}
+                                    title="Edit Product"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  {isOwner && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                      onClick={() => handleDelete(v._id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                );
+              });
+            })()
           )}
         </div>
       </div>

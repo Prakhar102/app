@@ -28,7 +28,11 @@ router.post('/', protect, async (req, res) => {
             dueAmount,
             paymentMode,
             bankAccountId,
-            description
+            payments,
+            description,
+            labourCharges,
+            vehicleNumber,
+            isDelivered
         } = req.body;
 
         // Create Transaction
@@ -39,11 +43,15 @@ router.post('/', protect, async (req, res) => {
             customerName,
             customerId,
             items,
+            labourCharges: parseFloat(labourCharges) || 0,
+            vehicleNumber: vehicleNumber || '',
+            isDelivered: typeof isDelivered === 'boolean' ? isDelivered : true,
             totalAmount,
             paidAmount,
             dueAmount,
             paymentMode,
             bankAccountId: paymentMode === 'ONLINE' ? bankAccountId : null,
+            payments: payments || [],
             description,
             date: new Date()
         });
@@ -66,16 +74,23 @@ router.post('/', protect, async (req, res) => {
         // Assuming items have itemName.
         if (type === 'SALE' && items && items.length > 0) {
             for (const item of items) {
-                // Find product by name and owner
+                // Find product by name, company, and owner to decrement stock correctly
+                const query = { ownerId, itemName: item.itemName };
+                if (item.company) {
+                    query.company = item.company;
+                }
+
                 await Product.findOneAndUpdate(
-                    { ownerId, itemName: item.itemName },
+                    query,
                     { $inc: { qty: -1 * (item.qty || 0) } }
                 );
             }
         }
 
         const populatedTransaction = await Transaction.findById(transaction._id)
-            .populate('bankAccountId', 'accountName');
+            .populate('customerId')
+            .populate('bankAccountId', 'accountName')
+            .populate('payments.bankAccountId', 'accountName');
 
         res.json({ success: true, transaction: populatedTransaction });
     } catch (error) {
@@ -89,7 +104,9 @@ router.get('/', protect, async (req, res) => {
     try {
         const ownerId = getOwnerId(req.user);
         const transactions = await Transaction.find({ ownerId })
+            .populate('customerId')
             .populate('bankAccountId', 'accountName')
+            .populate('payments.bankAccountId', 'accountName')
             .sort({ date: -1 })
             .limit(100); // Limit to last 100 for now
         res.json({ success: true, transactions });
@@ -106,7 +123,9 @@ router.get('/customer/:customerId', protect, async (req, res) => {
         const { customerId } = req.params;
 
         const transactions = await Transaction.find({ ownerId, customerId })
+            .populate('customerId')
             .populate('bankAccountId', 'accountName')
+            .populate('payments.bankAccountId', 'accountName')
             .sort({ date: -1 });
 
         res.json({ success: true, transactions });

@@ -25,13 +25,14 @@ router.get('/', protect, async (req, res) => {
 router.post('/', protect, async (req, res) => {
     try {
         const ownerId = getOwnerId(req.user);
-        const { name, mobile, address } = req.body;
+        const { name, mobile, address, gstNumber } = req.body;
 
         const customer = await Customer.create({
             ownerId,
             name,
             mobile: mobile || '',
             address: address || '',
+            gstNumber: gstNumber || '',
             totalDue: 0,
         });
 
