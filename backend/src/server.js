@@ -34,6 +34,16 @@ app.use('/api/bank-accounts', bankAccountRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`ERROR: Port ${PORT} is already in use.`);
+        console.error(`Try closing other terminals or running: Stop-Process -Id (Get-NetTCPConnection -LocalPort ${PORT}).OwningProcess -Force`);
+        process.exit(1);
+    } else {
+        throw err;
+    }
 });

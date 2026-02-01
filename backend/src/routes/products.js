@@ -27,11 +27,12 @@ router.get('/', protect, async (req, res) => {
 router.post('/', protect, async (req, res) => {
     try {
         const ownerId = getOwnerId(req.user);
-        const { itemName, qty, rate, unit, lowStockThreshold } = req.body;
+        const { itemName, company, qty, rate, unit, lowStockThreshold } = req.body;
 
         const product = await Product.create({
             ownerId,
             itemName,
+            company: company || '',
             qty,
             rate,
             unit: unit || 'Kg',

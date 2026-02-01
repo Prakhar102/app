@@ -33,6 +33,10 @@ const TransactionSchema = new mongoose.Schema({
     rate: Number,
     amount: Number,
   }],
+  labourCharges: {
+    type: Number,
+    default: 0,
+  },
   totalAmount: {
     type: Number,
     required: true,
@@ -47,19 +51,53 @@ const TransactionSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['CASH', 'ONLINE'],
+    enum: ['CASH', 'ONLINE', 'SPLIT'],
     default: 'CASH',
   },
   bankAccountId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BankAccount',
   },
+  payerName: {
+    type: String,
+    default: '',
+  },
   description: {
     type: String,
     default: '',
   },
+  vehicleNumber: {
+    type: String,
+    default: '',
+  },
+  isDelivered: {
+    type: Boolean,
+    default: true,
+  },
+  payments: [{
+    mode: {
+      type: String,
+      enum: ['CASH', 'ONLINE'],
+      required: true,
+    },
+    amount: {
+      type: Number,
+      required: true,
+    },
+    bankAccountId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BankAccount',
+    },
+    payerName: {
+      type: String,
+      default: '',
+    },
+  }],
 }, {
   timestamps: true,
 });
 
-export default mongoose.models.Transaction || mongoose.model('Transaction', TransactionSchema);
+if (mongoose.models.Transaction) {
+  delete mongoose.models.Transaction;
+}
+export default mongoose.model('Transaction', TransactionSchema);
