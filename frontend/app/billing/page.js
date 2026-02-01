@@ -16,7 +16,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from 'sonner';
-import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin } from 'lucide-react';
+import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin, FileText } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -33,6 +33,7 @@ export default function BillingPage() {
   const [voiceText, setVoiceText] = useState('');
   const [shopConfig, setShopConfig] = useState({});
   const [bankAccounts, setBankAccounts] = useState([]);
+  const [logoBase64, setLogoBase64] = useState('');
 
   // Manual billing form
   // Manual billing form
@@ -41,9 +42,17 @@ export default function BillingPage() {
     customerName: '',
     customerId: '',
     paymentMode: 'CASH',
-    paidAmount: 0,
+    paidAmount: '0',
     bankAccountId: '',
+    payerName: '',
+    labourCharges: '',
+    vehicleNumber: '',
+    isDelivered: true,
   });
+
+  // Split Payment State
+  const [isSplitPayment, setIsSplitPayment] = useState(false);
+  const [payments, setPayments] = useState([{ mode: 'CASH', amount: '', bankAccountId: '', payerName: '' }]);
 
   // Add Customer Modal State
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -51,6 +60,7 @@ export default function BillingPage() {
     name: '',
     mobile: '',
     address: '',
+    gstNumber: '',
   });
   const [customerLoading, setCustomerLoading] = useState(false);
 
@@ -102,6 +112,26 @@ export default function BillingPage() {
       const data = await response.json();
       if (data.success) {
         setShopConfig(data.user.shopConfig);
+        if (data.user.shopConfig.logoUrl) {
+          // pre-load logo as base64
+          const img = new Image();
+          img.crossOrigin = 'Anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            try {
+              const dataURL = canvas.toDataURL('image/png');
+              setLogoBase64(dataURL);
+            } catch (err) {
+              console.error('Failed to convert logo to base64:', err);
+            }
+          };
+          img.onerror = () => console.error('Failed to load logo image');
+          img.src = data.user.shopConfig.logoUrl;
+        }
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -247,7 +277,11 @@ export default function BillingPage() {
 
     // Auto-fill rate if product is selected
     if (field === 'itemName') {
-      const product = products.find((p) => p.itemName === value);
+      const product = products.find((p) => {
+        const displayName = p.company ? `${p.itemName} | ${p.company}` : p.itemName;
+        const valLow = value.trim().toLowerCase();
+        return displayName.toLowerCase() === valLow || p.itemName.toLowerCase() === valLow;
+      });
       if (product) {
         newItems[index].rate = product.rate;
       }
@@ -262,7 +296,34 @@ export default function BillingPage() {
   };
 
   const calculateTotal = () => {
-    return billItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+    const itemsTotal = billItems.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const labour = parseFloat(billData.labourCharges) || 0;
+    return itemsTotal + labour;
+  };
+
+  const addPaymentRow = () => {
+    setPayments([...payments, { mode: 'CASH', amount: '', bankAccountId: '', payerName: '' }]);
+  };
+
+  const removePaymentRow = (index) => {
+    setPayments(payments.filter((_, i) => i !== index));
+  };
+
+  const updatePaymentRow = (index, field, value) => {
+    const newPayments = [...payments];
+    newPayments[index][field] = value;
+    if (field === 'mode' && value === 'CASH') {
+      newPayments[index].bankAccountId = '';
+      newPayments[index].payerName = '';
+    }
+    setPayments(newPayments);
+  };
+
+  const calculateTotalPaid = () => {
+    if (isSplitPayment) {
+      return payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+    }
+    return parseFloat(billData.paidAmount) || 0;
   };
 
   const handleManualSubmit = async (e) => {
@@ -271,10 +332,23 @@ export default function BillingPage() {
 
     try {
       const total = calculateTotal();
-      const paid = parseFloat(billData.paidAmount) || 0;
+      const paid = calculateTotalPaid();
 
-      // Validation for Online Payment account
-      if (billData.paymentMode === 'ONLINE' && !billData.bankAccountId) {
+      // Validation for Split Payments
+      if (isSplitPayment) {
+        for (const p of payments) {
+          if (!p.amount || parseFloat(p.amount) <= 0) {
+            toast.error('Please enter a valid amount for all payments');
+            setLoading(false);
+            return;
+          }
+          if (p.mode === 'ONLINE' && !p.bankAccountId) {
+            toast.error('Please select a bank account for online payments');
+            setLoading(false);
+            return;
+          }
+        }
+      } else if (billData.paymentMode === 'ONLINE' && !billData.bankAccountId) {
         toast.error('Please select a bank account for online payment');
         setLoading(false);
         return;
@@ -306,19 +380,33 @@ export default function BillingPage() {
         type: 'SALE',
         customerName: billData.customerName,
         customerId: customerId,
-        items: billItems.map((item) => ({
-          itemName: item.itemName,
-          qty: parseFloat(item.qty),
-          rate: parseFloat(item.rate),
-          amount: item.amount,
+        items: billItems.map(item => ({
+          ...item,
+          itemName: item.itemName.split('|')[0].trim(),
+          company: item.itemName.includes('|') ? item.itemName.split('|')[1].trim() : ''
         })),
         totalAmount: total,
         paidAmount: paid,
         dueAmount: total - paid,
-        paymentMode: billData.paymentMode,
-        bankAccountId: billData.bankAccountId,
+        paymentMode: isSplitPayment ? 'SPLIT' : billData.paymentMode,
+        bankAccountId: !isSplitPayment && billData.paymentMode === 'ONLINE' ? billData.bankAccountId : null,
+        payerName: !isSplitPayment && billData.paymentMode === 'ONLINE' ? billData.payerName : '',
+        labourCharges: parseFloat(billData.labourCharges) || 0,
+        vehicleNumber: billData.vehicleNumber,
+        isDelivered: billData.isDelivered,
+        payments: isSplitPayment ? payments.map(p => ({
+          ...p,
+          amount: parseFloat(p.amount) || 0,
+          bankAccountId: p.mode === 'ONLINE' && p.bankAccountId ? p.bankAccountId : null,
+          payerName: p.mode === 'ONLINE' ? p.payerName : ''
+        })) : [{
+          mode: billData.paymentMode,
+          amount: paid,
+          bankAccountId: billData.paymentMode === 'ONLINE' && billData.bankAccountId ? billData.bankAccountId : null,
+          payerName: billData.paymentMode === 'ONLINE' ? billData.payerName : ''
+        }],
+        description: `Sale to ${billData.customerName}`,
       };
-
       const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -328,10 +416,12 @@ export default function BillingPage() {
       const result = await response.json();
       if (result.success) {
         toast.success('Bill saved successfully!');
-        // generatePDF(result.transaction);
+        // generatePDF(result.transaction); - Removed auto-download per user request
         // Reset form
         setBillItems([{ itemName: '', qty: '', rate: '', amount: 0 }]);
-        setBillData({ customerName: '', customerId: '', paymentMode: 'CASH', paidAmount: 0 });
+        setBillData({ customerName: '', customerId: '', paymentMode: 'CASH', paidAmount: '0', labourCharges: '', vehicleNumber: '', isDelivered: true });
+        setIsSplitPayment(false);
+        setPayments([{ mode: 'CASH', amount: '', bankAccountId: '' }]);
         fetchProducts();
       } else {
         toast.error('Failed to create bill');
@@ -365,7 +455,7 @@ export default function BillingPage() {
         }));
 
         setIsCustomerModalOpen(false);
-        setNewCustomerData({ name: '', mobile: '', address: '' });
+        setNewCustomerData({ name: '', mobile: '', address: '', gstNumber: '' });
       } else {
         toast.error(data.error || 'Failed to add customer');
       }
@@ -421,62 +511,177 @@ export default function BillingPage() {
     });
 
     // Add shop logo if available
-    if (shopConfig.logoUrl) {
-      // doc.addImage(shopConfig.logoUrl, 'PNG', 10, 10, 30, 30);
+    if (logoBase64) {
+      try {
+        doc.addImage(logoBase64, 'PNG', 12, 10, 20, 20);
+      } catch (err) {
+        console.error('Failed to add logo to PDF:', err);
+      }
     }
 
     // Shop details
-    doc.setFontSize(16);
-    doc.text(shopConfig.shopName || 'My Fertilizer Shop', 105, 15, { align: 'center' });
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text(shopConfig.shopName || 'My Fertilizer Shop', 138, 18, { align: 'right' });
     doc.setFontSize(10);
-    doc.text(shopConfig.address || '', 105, 22, { align: 'center' });
+    doc.setFont(undefined, 'normal');
+    doc.text(shopConfig.address || '', 138, 25, { align: 'right' });
     if (shopConfig.gstNumber) {
-      doc.text(`GST: ${shopConfig.gstNumber}`, 105, 28, { align: 'center' });
+      doc.text(`GST: ${shopConfig.gstNumber}`, 138, 31, { align: 'right' });
     }
 
     doc.setLineWidth(0.5);
-    doc.line(10, 32, 138, 32);
+    doc.line(10, 38, 138, 38);
 
     // Invoice details
     doc.setFontSize(12);
-    doc.text('INVOICE', 105, 40, { align: 'center' });
+    doc.text('INVOICE', 74, 46, { align: 'center' });
     doc.setFontSize(9);
-    doc.text(`Date: ${new Date(transaction.date).toLocaleDateString('en-IN')}`, 10, 46);
-    doc.text(`Customer: ${transaction.customerName || 'Walk-in'}`, 10, 52);
+    doc.text(`Date: ${new Date(transaction.date).toLocaleDateString('en-IN')}`, 10, 52);
+
+    let nextY = 58;
+    doc.setFont(undefined, 'bold');
+    doc.text(`Customer: ${transaction.customerName || 'Walk-in'}`, 10, nextY);
+    doc.setFont(undefined, 'normal');
+    nextY += 5;
+
+    if (transaction.customerId && typeof transaction.customerId === 'object') {
+      if (transaction.customerId.mobile) {
+        doc.text(`Mobile: ${transaction.customerId.mobile}`, 10, nextY);
+        nextY += 5;
+      }
+      if (transaction.customerId.address) {
+        doc.text(`Address: ${transaction.customerId.address}`, 10, nextY);
+        nextY += 5;
+      }
+      if (transaction.customerId.gstNumber) {
+        doc.text(`GST: ${transaction.customerId.gstNumber}`, 10, nextY);
+        nextY += 5;
+      }
+    }
 
     // Items table
     const tableData = transaction.items.map((item) => [
-      item.itemName,
+      item.itemName + (item.company ? ` (${item.company})` : ''),
       item.qty.toString(),
-      `₹${item.rate}`,
-      `₹${item.amount}`,
+      `Rs. ${item.rate}`,
+      `Rs. ${item.amount}`,
     ]);
 
     doc.autoTable({
-      startY: 58,
+      startY: nextY + 2,
       head: [['Item', 'Qty', 'Rate', 'Amount']],
       body: tableData,
       theme: 'grid',
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [22, 163, 74] },
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [22, 163, 74], textColor: 255, fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 'auto' },
+        1: { cellWidth: 20, halign: 'center' },
+        2: { cellWidth: 30, halign: 'right' },
+        3: { cellWidth: 30, halign: 'right' },
+      },
     });
 
-    const finalY = doc.lastAutoTable.finalY + 5;
+    const finalY = doc.lastAutoTable.finalY + 10;
 
-    // Totals
-    doc.text(`Total: ₹${transaction.totalAmount}`, 138, finalY, { align: 'right' });
-    doc.text(`Paid: ₹${transaction.paidAmount}`, 138, finalY + 6, { align: 'right' });
+    // Totals Section
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+
+    let currentY = finalY;
+    const itemsSubtotal = transaction.items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+    const labour = transaction.labourCharges || (transaction.totalAmount - itemsSubtotal);
+
+    // Items Subtotal
+    doc.text(`Items Subtotal:`, 90, currentY);
+    doc.text(`Rs. ${itemsSubtotal.toLocaleString()}`, 138, currentY, { align: 'right' });
+    currentY += 6;
+
+    // Labour Charges
+    if (labour > 0) {
+      doc.text(`Labour/Loading:`, 90, currentY);
+      doc.text(`Rs. ${labour.toLocaleString()}`, 138, currentY, { align: 'right' });
+      currentY += 6;
+    }
+
+    // Grand Total
     doc.setFont(undefined, 'bold');
-    doc.text(`Due: ₹${transaction.dueAmount}`, 138, finalY + 12, { align: 'right' });
+    doc.setFontSize(11);
+    doc.text(`Total Amount:`, 90, currentY);
+    doc.text(`Rs. ${transaction.totalAmount.toLocaleString()}`, 138, currentY, { align: 'right' });
+    currentY += 8;
 
-    // Payment Info
+    // Paid Amount
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Paid Amount:`, 90, currentY);
+    doc.text(`Rs. ${transaction.paidAmount.toLocaleString()}`, 138, currentY, { align: 'right' });
+    currentY += 2;
+
+    // Line separator
+    doc.setDrawColor(200);
+    doc.line(90, currentY + 2, 138, currentY + 2);
+    currentY += 7;
+
+    // Due Amount
+    doc.setFontSize(11);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(220, 0, 0); // Red for Due
+    doc.text(`Balance Due:`, 90, currentY);
+    doc.text(`Rs. ${transaction.dueAmount.toLocaleString()}`, 138, currentY, { align: 'right' });
+    doc.setTextColor(0);
+
+    // Need to pass the last Y to payment info logic
+    const finalTotalsY = currentY;
+
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
-    const paymentInfoY = finalY + 20;
-    doc.text(`Payment Mode: ${transaction.paymentMode}`, 10, paymentInfoY);
-    if (transaction.paymentMode === 'ONLINE' && transaction.bankAccountId?.accountName) {
-      doc.text(`Account: ${transaction.bankAccountId.accountName}`, 10, paymentInfoY + 5);
+    const paymentInfoY = finalTotalsY + 15;
+
+    doc.setDrawColor(240);
+    doc.setFillColor(250, 250, 250);
+    doc.rect(10, paymentInfoY - 5, 128, 25, 'F');
+
+    doc.setFont(undefined, 'bold');
+    doc.text(`Payment Details:`, 12, paymentInfoY);
+    doc.setFont(undefined, 'normal');
+
+    if (transaction.paidAmount === 0) {
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(220, 0, 0); // Red for Credit
+      doc.text(`Mode: CREDIT (Full Due)`, 12, paymentInfoY + 5);
+      doc.setTextColor(0);
+      doc.setFont(undefined, 'normal');
+    } else if (transaction.paymentMode === 'SPLIT' && transaction.payments && transaction.payments.length > 0) {
+      doc.text(`Mode: SPLIT`, 12, paymentInfoY + 5);
+      transaction.payments.forEach((p, i) => {
+        const accountInfo = p.bankAccountId?.accountName ? ` (${p.bankAccountId.accountName})` : '';
+        const payerInfo = p.payerName ? ` [From: ${p.payerName}]` : '';
+        doc.text(`- ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}`, 15, paymentInfoY + 10 + (i * 5));
+      });
+    } else {
+      doc.text(`Mode: ${transaction.paymentMode}`, 12, paymentInfoY + 5);
+      if (transaction.paymentMode === 'ONLINE') {
+        if (transaction.bankAccountId?.accountName) {
+          doc.text(`A/C: ${transaction.bankAccountId.accountName}`, 12, paymentInfoY + 10);
+        }
+        if (transaction.payerName) {
+          doc.text(`From: ${transaction.payerName}`, 12, paymentInfoY + 15);
+        }
+      }
     }
+
+    // Delivery Info
+    let deliveryInfoY = paymentInfoY + 28;
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    if (transaction.vehicleNumber) {
+      doc.text(`Vehicle No: ${transaction.vehicleNumber}`, 12, deliveryInfoY);
+      deliveryInfoY += 5;
+    }
+    const deliveryStatus = transaction.isDelivered ? 'YES' : 'NO';
+    doc.text(`Delivered: ${deliveryStatus}`, 12, deliveryInfoY);
 
     // Footer
     doc.setFont(undefined, 'normal');
@@ -559,7 +764,7 @@ export default function BillingPage() {
             <CardContent>
               <form onSubmit={handleManualSubmit} className="space-y-6">
                 {/* Customer Details */}
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>Shop Name</Label>
                     <div className="flex gap-2">
@@ -609,6 +814,19 @@ export default function BillingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-green-600" />
+                                GST Number
+                              </Label>
+                              <Input
+                                id="gstNumber"
+                                placeholder="Enter GST number (optional)"
+                                value={newCustomerData.gstNumber}
+                                onChange={(e) => setNewCustomerData({ ...newCustomerData, gstNumber: e.target.value })}
+                                className="border-green-100 focus:border-green-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label className="flex items-center gap-2">
                                 <Phone className="w-4 h-4 text-green-600" />
                                 Mobile
                               </Label>
@@ -650,86 +868,6 @@ export default function BillingPage() {
                       ))}
                     </datalist>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Payment Mode</Label>
-                    <div className="flex gap-2">
-                      <select
-                        className="w-full h-10 px-3 py-2 border rounded-md"
-                        value={billData.paymentMode}
-                        onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
-                      >
-                        <option value="CASH">Cash</option>
-                        <option value="ONLINE">Online</option>
-                      </select>
-                      {billData.paymentMode === 'ONLINE' && (
-                        <div className="flex-1 flex gap-2">
-                          <select
-                            className="flex-1 h-10 px-3 py-2 border rounded-md"
-                            value={billData.bankAccountId}
-                            onChange={(e) => setBillData({ ...billData, bankAccountId: e.target.value })}
-                            required
-                          >
-                            <option value="">Select Account</option>
-                            {bankAccounts.map((acc) => (
-                              <option key={acc._id} value={acc._id}>{acc.accountName}</option>
-                            ))}
-                          </select>
-                          <Dialog open={isBankModalOpen} onOpenChange={setIsBankModalOpen}>
-                            <DialogTrigger asChild>
-                              <Button type="button" variant="outline" size="icon" title="Add New Bank Account">
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Add New Bank Account</DialogTitle>
-                                <DialogDescription>
-                                  Enter bank account or wallet details.
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                  <Label>Account Name (e.g., PhonePe, SBI)</Label>
-                                  <Input
-                                    value={newBankData.accountName}
-                                    onChange={(e) => setNewBankData({ ...newBankData, accountName: e.target.value })}
-                                    required
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>Account Number (Optional)</Label>
-                                  <Input
-                                    value={newBankData.accountNumber}
-                                    onChange={(e) => setNewBankData({ ...newBankData, accountNumber: e.target.value })}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>IFSC Code (Optional)</Label>
-                                  <Input
-                                    value={newBankData.ifscCode}
-                                    onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label>UPI ID (Optional)</Label>
-                                  <Input
-                                    value={newBankData.upiId}
-                                    onChange={(e) => setNewBankData({ ...newBankData, upiId: e.target.value })}
-                                  />
-                                </div>
-                              </div>
-                              <DialogFooter>
-                                <Button type="button" onClick={handleCreateBankAccount} disabled={bankLoading} className="bg-green-600 w-full">
-                                  {bankLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
-                                  Add Account
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
 
                 {/* Bill Items */}
@@ -747,12 +885,56 @@ export default function BillingPage() {
                       <div className="col-span-4">
                         <Label className="text-xs">{t('itemName')}</Label>
                         <Input
-                          list="products-list"
-                          placeholder="Product"
+                          list={`products-list-${index}`}
+                          placeholder="Select Product"
                           value={item.itemName}
                           onChange={(e) => updateBillItem(index, 'itemName', e.target.value)}
                           required
                         />
+                        <datalist id={`products-list-${index}`}>
+                          {/* 
+                            Logic: 
+                            1. Get unique base item names.
+                            2. If current value matches a base item name exactly, show variants.
+                            3. Otherwise, show base item names.
+                          */}
+                          {(() => {
+                            // Normalize unique names case-insensitively
+                            const nameMap = products.reduce((acc, p) => {
+                              const lowName = p.itemName.trim().toLowerCase();
+                              if (!acc.has(lowName)) acc.set(lowName, p.itemName);
+                              return acc;
+                            }, new Map());
+
+                            const uniqueNames = Array.from(nameMap.values());
+                            const currentInputLow = item.itemName.trim().toLowerCase();
+
+                            // Check if current input matches any base name case-insensitively
+                            let matchingOriginalName = null;
+                            for (const [low, orig] of nameMap.entries()) {
+                              if (low === currentInputLow) {
+                                matchingOriginalName = orig;
+                                break;
+                              }
+                            }
+
+                            if (matchingOriginalName) {
+                              const variants = products.filter(p =>
+                                p.itemName.trim().toLowerCase() === currentInputLow
+                              );
+                              // Only show variants if there are multiple or if the single variant has a company
+                              if (variants.length > 1 || (variants[0]?.company)) {
+                                return variants.map(v => (
+                                  <option key={v._id} value={`${v.itemName} | ${v.company || 'Standard'}`} />
+                                ));
+                              }
+                            }
+
+                            return uniqueNames.map(name => (
+                              <option key={name} value={name} />
+                            ));
+                          })()}
+                        </datalist>
                       </div>
                       <div className="col-span-2">
                         <Label className="text-xs">{t('quantity')}</Label>
@@ -799,32 +981,259 @@ export default function BillingPage() {
                   ))}
                 </div>
 
-                <datalist id="products-list">
-                  {products.map((product) => (
-                    <option key={product._id} value={product.itemName} />
-                  ))}
-                </datalist>
 
-                {/* Totals */}
-                <div className="border-t pt-4 space-y-2">
-                  <div className="flex justify-between text-lg font-semibold">
-                    <span>Total:</span>
+                {/* Totals & Payment */}
+                <div className="border-t pt-4 space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                  {/* Labour Charges Input */}
+                  <div className="flex items-center justify-between py-2">
+                    <Label className="text-gray-600">Labour Charges / Loading (₹)</Label>
+                    <div className="w-32">
+                      <Input
+                        type="number"
+                        placeholder="Labour"
+                        className="h-8 text-right font-medium border-gray-200"
+                        value={billData.labourCharges}
+                        onChange={(e) => setBillData({ ...billData, labourCharges: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 py-2 border-t border-dashed border-gray-200">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Vehicle Number</Label>
+                      <Input
+                        placeholder="e.g. UP 80 AX 1234"
+                        className="h-8 font-medium border-gray-200"
+                        value={billData.vehicleNumber}
+                        onChange={(e) => setBillData({ ...billData, vehicleNumber: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-gray-500">Delivered?</Label>
+                      <div className="flex gap-2 h-8 items-center">
+                        <Button
+                          type="button"
+                          variant={billData.isDelivered ? 'default' : 'outline'}
+                          size="sm"
+                          className={`flex-1 h-7 text-xs ${billData.isDelivered ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                          onClick={() => setBillData({ ...billData, isDelivered: true })}
+                        >
+                          Yes
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={!billData.isDelivered ? 'destructive' : 'outline'}
+                          size="sm"
+                          className={`flex-1 h-7 text-xs ${!billData.isDelivered ? 'bg-red-600 hover:bg-red-700' : ''}`}
+                          onClick={() => setBillData({ ...billData, isDelivered: false })}
+                        >
+                          No
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1. Total display */}
+                  <div className="flex justify-between text-lg font-semibold pt-2 border-t border-dashed border-gray-200">
+                    <span>Total Bill:</span>
                     <span>₹{calculateTotal()}</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label>{t('paid')}</Label>
+
+                  {/* 2. Payment Method selection (Move into flow) */}
+                  <div className="space-y-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-blue-900 font-bold">How would you like to pay?</Label>
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="split-mode-bottom" className="text-xs cursor-pointer text-blue-600 font-medium">Split Payment?</Label>
+                        <input
+                          id="split-mode-bottom"
+                          type="checkbox"
+                          checked={isSplitPayment}
+                          onChange={(e) => setIsSplitPayment(e.target.checked)}
+                          className="w-4 h-4 accent-blue-600"
+                        />
+                      </div>
+                    </div>
+
+                    {!isSplitPayment ? (
+                      <div className="flex gap-2">
+                        <select
+                          className="flex-1 h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                          value={billData.paymentMode}
+                          onChange={(e) => setBillData({ ...billData, paymentMode: e.target.value })}
+                        >
+                          <option value="CASH">Cash</option>
+                          <option value="ONLINE">Online</option>
+                        </select>
+                        {billData.paymentMode === 'ONLINE' && (
+                          <div className="flex-1 flex flex-col gap-2">
+                            <div className="flex gap-2">
+                              <select
+                                className="flex-1 h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                value={billData.bankAccountId}
+                                onChange={(e) => setBillData({ ...billData, bankAccountId: e.target.value })}
+                                required
+                              >
+                                <option value="">Select Account</option>
+                                {bankAccounts.map((acc) => (
+                                  <option key={acc._id} value={acc._id}>{acc.accountName}</option>
+                                ))}
+                              </select>
+                              <Dialog open={isBankModalOpen} onOpenChange={setIsBankModalOpen}>
+                                <DialogTrigger asChild>
+                                  <Button type="button" variant="outline" size="icon" className="border-gray-300 hover:bg-blue-50 text-blue-600" title="Add New Bank Account">
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>Add New Bank Account</DialogTitle>
+                                    <DialogDescription>
+                                      Enter bank account or wallet details.
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="space-y-4 py-4">
+                                    <div className="space-y-2">
+                                      <Label>Account Name (e.g., PhonePe, SBI)</Label>
+                                      <Input
+                                        value={newBankData.accountName}
+                                        onChange={(e) => setNewBankData({ ...newBankData, accountName: e.target.value })}
+                                        required
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>Account Number (Optional)</Label>
+                                      <Input
+                                        value={newBankData.accountNumber}
+                                        onChange={(e) => setNewBankData({ ...newBankData, accountNumber: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>IFSC Code (Optional)</Label>
+                                      <Input
+                                        value={newBankData.ifscCode}
+                                        onChange={(e) => setNewBankData({ ...newBankData, ifscCode: e.target.value })}
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <Label>UPI ID (Optional)</Label>
+                                      <Input
+                                        value={newBankData.upiId}
+                                        onChange={(e) => setNewBankData({ ...newBankData, upiId: e.target.value })}
+                                      />
+                                    </div>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button type="button" onClick={handleCreateBankAccount} disabled={bankLoading} className="bg-blue-600 w-full hover:bg-blue-700">
+                                      {bankLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                                      Add Account
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            </div>
+                            <Input
+                              placeholder="From (Account Holder Name)"
+                              className="h-10 border-gray-300 shadow-sm"
+                              value={billData.payerName}
+                              onChange={(e) => setBillData({ ...billData, payerName: e.target.value })}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3 bg-white p-3 rounded-xl border border-gray-200">
+                        {payments.map((p, idx) => (
+                          <div key={idx} className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
+                            <div className="flex gap-2 items-start">
+                              <div className="flex-1 flex gap-2">
+                                <select
+                                  className="flex-1 h-9 text-sm px-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                  value={p.mode}
+                                  onChange={(e) => updatePaymentRow(idx, 'mode', e.target.value)}
+                                >
+                                  <option value="CASH">Cash</option>
+                                  <option value="ONLINE">Online</option>
+                                </select>
+                                {p.mode === 'ONLINE' && (
+                                  <select
+                                    className="flex-1 h-9 text-sm px-2 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={p.bankAccountId}
+                                    onChange={(e) => updatePaymentRow(idx, 'bankAccountId', e.target.value)}
+                                    required
+                                  >
+                                    <option value="">Select Account</option>
+                                    {bankAccounts.map((acc) => (
+                                      <option key={acc._id} value={acc._id}>{acc.accountName}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+                              <div className="w-32">
+                                <Input
+                                  type="number"
+                                  placeholder="Amount"
+                                  className="h-9 text-sm border-gray-200"
+                                  value={p.amount}
+                                  onChange={(e) => updatePaymentRow(idx, 'amount', e.target.value)}
+                                  required
+                                />
+                              </div>
+                              {payments.length > 1 && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-red-500 hover:bg-red-50"
+                                  onClick={() => removePaymentRow(idx)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                            {p.mode === 'ONLINE' && (
+                              <Input
+                                placeholder="From Account (Payer Name)"
+                                className="h-8 text-xs border-gray-200 bg-white"
+                                value={p.payerName}
+                                onChange={(e) => updatePaymentRow(idx, 'payerName', e.target.value)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-9 text-xs font-semibold text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                          onClick={addPaymentRow}
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Add Another Payment Method
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. Paid Amount input */}
+                  <div className="space-y-2 pt-4 border-t border-gray-200">
+                    <Label className="font-bold text-gray-700">Amount Paid (₹)</Label>
                     <Input
                       type="number"
                       placeholder="Amount paid"
-                      value={billData.paidAmount}
+                      value={isSplitPayment ? calculateTotalPaid() : billData.paidAmount}
                       onChange={(e) => setBillData({ ...billData, paidAmount: e.target.value })}
+                      readOnly={isSplitPayment}
+                      className={isSplitPayment ? "bg-gray-100 font-bold" : "text-lg ring-1 ring-gray-200"}
                       required
                     />
                   </div>
-                  <div className="flex justify-between text-lg font-semibold text-orange-600">
+
+                  {/* 4. Due amount display */}
+                  <div className="flex justify-between text-lg font-bold text-orange-600 pt-4 border-t border-gray-200">
                     <span>{t('due')}:</span>
-                    <span>₹{calculateTotal() - (parseFloat(billData.paidAmount) || 0)}</span>
+                    <span>₹{calculateTotal() - calculateTotalPaid()}</span>
                   </div>
+
+
                 </div>
 
                 <div className="flex justify-center pt-4">
@@ -847,6 +1256,6 @@ export default function BillingPage() {
           </Card>
         )}
       </div>
-    </DashboardLayout>
+    </DashboardLayout >
   );
 }

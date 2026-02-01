@@ -40,7 +40,7 @@ export async function GET(request) {
     }
 
     const transactions = await Transaction.find(query).sort({ date: -1 });
-    
+
     return NextResponse.json({ success: true, transactions });
   } catch (error) {
     console.error('Get transactions error:', error);
@@ -61,6 +61,9 @@ export async function POST(request) {
     await connectDB();
     const ownerId = await getOwnerId(session);
     const transactionData = await request.json();
+    console.log('--- DEBUG: POST /api/transactions ---');
+    console.log('Incoming paymentMode:', transactionData.paymentMode);
+    console.log('Transaction Model Enum:', Transaction.schema.path('paymentMode').enumValues);
 
     const transaction = await Transaction.create({
       ...transactionData,
@@ -72,14 +75,14 @@ export async function POST(request) {
     if (transactionData.type === 'SALE' && transactionData.items) {
       for (const item of transactionData.items) {
         await Product.findOneAndUpdate(
-          { ownerId: new mongoose.Types.ObjectId(ownerId), itemName: item.itemName },
+          { ownerId: new mongoose.Types.ObjectId(ownerId), itemName: item.itemName, company: item.company || '' },
           { $inc: { qty: -item.qty } }
         );
       }
     } else if (transactionData.type === 'PURCHASE' && transactionData.items) {
       for (const item of transactionData.items) {
         await Product.findOneAndUpdate(
-          { ownerId: new mongoose.Types.ObjectId(ownerId), itemName: item.itemName },
+          { ownerId: new mongoose.Types.ObjectId(ownerId), itemName: item.itemName, company: item.company || '' },
           { $inc: { qty: item.qty } },
           { upsert: false }
         );

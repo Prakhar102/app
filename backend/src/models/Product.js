@@ -10,6 +10,10 @@ const ProductSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  company: {
+    type: String,
+    default: '',
+  },
   qty: {
     type: Number,
     required: true,
