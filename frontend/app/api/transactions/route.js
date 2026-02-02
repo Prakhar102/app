@@ -61,6 +61,12 @@ export async function POST(request) {
     await connectDB();
     const ownerId = await getOwnerId(session);
     const transactionData = await request.json();
+
+    // Fix: Convert empty string customerId to null (prevents ObjectId validation error)
+    if (!transactionData.customerId || transactionData.customerId === '') {
+      transactionData.customerId = null;
+    }
+
     console.log('--- DEBUG: POST /api/transactions ---');
     console.log('Incoming paymentMode:', transactionData.paymentMode);
     console.log('Transaction Model Enum:', Transaction.schema.path('paymentMode').enumValues);
