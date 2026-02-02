@@ -11,6 +11,23 @@ export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  const translations = {
+    loading: 'Loading...',
+    posSystem: 'Complete POS & Management System for Fertilizer Shops',
+    voiceAssistant: 'AI Voice Assistant',
+    smartBilling: 'Smart Billing',
+    fastBilling: 'Generate bills in seconds with local dialect support',
+    inventory: 'Inventory Management',
+    stockTracking: 'Real-time stock tracking and alerts',
+    customerBalances: 'Customer Ledger',
+    dueTracking: 'Track payments, dues (Udhaar) easily',
+    dayBook: 'Day Book & Reports',
+    staffManagement: 'Staff Management',
+    manageStaffAccounts: 'Manage staff accounts and permissions',
+    builtWith: 'Built for Indian Business',
+  };
+  const t = (key) => translations[key] || key;
+
   useEffect(() => {
     if (status === 'authenticated') {
       router.push('/dashboard');

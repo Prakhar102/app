@@ -36,10 +36,24 @@ router.post('/', protect, async (req, res) => {
             date
         } = req.body;
 
-        let invoiceNumber = null;
-        if (type === 'SALE') {
-            const saleCount = await Transaction.countDocuments({ ownerId, type: 'SALE' });
-            invoiceNumber = (saleCount % 3000) + 1;
+        // Prepare payments array with correct dates and filter zero amounts
+        const processedPayments = (payments || [])
+            .filter(p => p.amount > 0)
+            .map(p => ({
+                ...p,
+                date: date ? new Date(date) : new Date() // Use bill date for initial payments
+            }));
+
+        // Handle single payment mode logic if used
+        const mainPaymentAmount = parseFloat(paidAmount) || 0;
+        if (paymentMode !== 'SPLIT' && mainPaymentAmount > 0 && processedPayments.length === 0) {
+            processedPayments.push({
+                mode: paymentMode,
+                amount: mainPaymentAmount,
+                bankAccountId: paymentMode === 'ONLINE' ? bankAccountId : null,
+                payerName: paymentMode === 'ONLINE' ? (req.body.payerName || '') : '',
+                date: date ? new Date(date) : new Date()
+            });
         }
 
         // Create Transaction
@@ -56,9 +70,9 @@ router.post('/', protect, async (req, res) => {
             totalAmount,
             paidAmount,
             dueAmount,
-            paymentMode,
+            paymentMode: (processedPayments.length > 1) ? 'SPLIT' : paymentMode,
             bankAccountId: paymentMode === 'ONLINE' ? bankAccountId : null,
-            payments: payments || [],
+            payments: processedPayments,
             description,
             invoiceNumber,
             date: date ? new Date(date) : new Date()
@@ -66,8 +80,7 @@ router.post('/', protect, async (req, res) => {
 
         console.log('New Transaction Created:', {
             id: transaction._id,
-            mode: transaction.paymentMode,
-            bankAccId: transaction.bankAccountId
+            mode: transaction.paymentMode
         });
 
         // Update Customer Due Amount if applicable
@@ -157,20 +170,32 @@ router.patch('/:id', protect, async (req, res) => {
 
         const oldDue = transaction.dueAmount;
 
+        // Ensure legacy payments have a date BEFORE we save (prevents Date.now overwrite)
+        if (transaction.payments && transaction.payments.length > 0) {
+            transaction.payments.forEach(p => {
+                if (!p.date) {
+                    p.date = transaction.date; // Use original bill date for legacy payments
+                }
+            });
+        }
+
         // Handle new payments
         if (payments && Array.isArray(payments) && payments.length > 0) {
             let additionalPaid = 0;
-            const newPaymentEntries = payments.map(p => {
-                const amount = parseFloat(p.amount) || 0;
-                additionalPaid += amount;
-                return {
-                    mode: p.mode || 'CASH',
-                    amount: amount,
-                    bankAccountId: p.mode === 'ONLINE' ? p.bankAccountId : null,
-                    payerName: p.mode === 'ONLINE' ? p.payerName : null,
-                    date: date ? new Date(date) : new Date()
-                };
-            });
+            const newPaymentEntries = payments
+                .filter(p => parseFloat(p.amount) > 0) // Filter zero amounts
+                .map(p => {
+                    const amount = parseFloat(p.amount) || 0;
+                    additionalPaid += amount;
+                    return {
+                        mode: p.mode || 'CASH',
+                        amount: amount,
+                        bankAccountId: p.mode === 'ONLINE' ? p.bankAccountId : null,
+                        payerName: p.mode === 'ONLINE' ? p.payerName : null,
+                        // Use explicitly provided date for new payments, fallback to NOW only if strictly necessary
+                        date: date ? new Date(date) : new Date()
+                    };
+                });
 
             transaction.payments = [...(transaction.payments || []), ...newPaymentEntries];
             transaction.paidAmount = (transaction.paidAmount || 0) + additionalPaid;
@@ -186,7 +211,7 @@ router.patch('/:id', protect, async (req, res) => {
         }
 
         if (description) transaction.description = description;
-        if (date) transaction.date = new Date(date);
+        // if (date) transaction.date = new Date(date); // Keep original bill date
 
         await transaction.save();
 

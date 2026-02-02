@@ -163,6 +163,37 @@ export default function CustomersPage() {
       doc.setFontSize(9);
       doc.text(`Date: ${new Date(transaction.date).toLocaleDateString('en-IN')}`, 10, 52);
 
+      // Vehicle No (Parallel to Date)
+      doc.setFontSize(9);
+      if (transaction.vehicleNumber) {
+        doc.setFont(undefined, 'bold');
+        const vLabel = "Vehicle No: ";
+        const vValue = transaction.vehicleNumber;
+        const vValueWidth = doc.getTextWidth(vValue);
+
+        // Print Label (Black)
+        doc.setTextColor(0, 0, 0);
+        doc.text(vLabel, 138 - vValueWidth, 52, { align: 'right' });
+
+        // Print Number (Blue)
+        doc.setTextColor(37, 99, 235); // Blue color
+        doc.text(vValue, 138, 52, { align: 'right' });
+
+        doc.setTextColor(0, 0, 0); // Reset
+      }
+
+      // Delivered Status (Parallel to Customer)
+      doc.setFont(undefined, 'bold');
+      doc.text("Delivered: ", 128, 58, { align: 'right' });
+      if (transaction.isDelivered) {
+        doc.setTextColor(22, 163, 74);
+        doc.text("YES", 138, 58, { align: 'right' });
+      } else {
+        doc.setTextColor(220, 0, 0);
+        doc.text("NO", 138, 58, { align: 'right' });
+      }
+      doc.setTextColor(0);
+
       let nextY = 58;
       doc.setFont(undefined, 'bold');
       doc.text(`Customer: ${transaction.customerName || 'Walk-in'}`, 10, nextY);
@@ -263,30 +294,10 @@ export default function CustomersPage() {
       // Need to pass the last Y to payment info logic
       const finalTotalsY = currentY;
 
-      // Delivery Info
-      let deliveryInfoY = finalTotalsY + 15;
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'bold');
-      if (transaction.vehicleNumber) {
-        doc.text(`Vehicle No: ${transaction.vehicleNumber}`, 12, deliveryInfoY);
-        deliveryInfoY += 5;
-      }
-      const deliveryStatus = transaction.isDelivered ? 'YES' : 'NO';
-      doc.text(`Delivered: `, 12, deliveryInfoY);
-
-      if (transaction.isDelivered) {
-        doc.setTextColor(22, 163, 74); // Green
-        doc.text('YES', 30, deliveryInfoY);
-      } else {
-        doc.setTextColor(220, 0, 0); // Red 
-        doc.text('NO', 30, deliveryInfoY);
-      }
-      doc.setTextColor(0); // Reset color
-
       // Payment Info
       doc.setFontSize(9);
       doc.setFont(undefined, 'normal');
-      const paymentInfoY = deliveryInfoY + 15;
+      const paymentInfoY = finalTotalsY + 10;
 
       doc.setDrawColor(240);
       doc.setFillColor(250, 250, 250);
@@ -302,12 +313,19 @@ export default function CustomersPage() {
         doc.text(`Mode: CREDIT (Full Due)`, 12, paymentInfoY + 5);
         doc.setTextColor(0);
         doc.setFont(undefined, 'normal');
-      } else if (transaction.paymentMode === 'SPLIT' && transaction.payments && transaction.payments.length > 0) {
-        doc.text(`Mode: SPLIT`, 12, paymentInfoY + 5);
-        transaction.payments.forEach((p, i) => {
+      } else if (transaction.payments && transaction.payments.length > 0) {
+        doc.text(`Payment History:`, 12, paymentInfoY + 5);
+        transaction.payments.filter(p => p.amount > 0).forEach((p, i) => {
+          let dateStr = '';
+          // Use payment date if available, otherwise fallback to transaction date (Bill Date)
+          const paymentDate = p.date ? new Date(p.date) : new Date(transaction.date);
+          dateStr = `[${paymentDate.getDate()}/${paymentDate.getMonth() + 1}/${paymentDate.getFullYear().toString().slice(-2)}]`;
+
           const accountInfo = p.bankAccountId?.accountName ? ` (${p.bankAccountId.accountName})` : '';
-          const payerInfo = p.payerName ? ` [From: ${p.payerName}]` : '';
-          doc.text(`- ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}`, 15, paymentInfoY + 10 + (i * 5));
+          const payerInfo = p.payerName ? ` [By: ${p.payerName}]` : '';
+
+          const lineText = dateStr ? `${dateStr} - ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}` : `- ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}`;
+          doc.text(lineText, 15, paymentInfoY + 10 + (i * 5));
         });
       } else {
         doc.text(`Mode: ${transaction.paymentMode}`, 12, paymentInfoY + 5);

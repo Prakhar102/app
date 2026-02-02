@@ -92,6 +92,10 @@ const TransactionSchema = new mongoose.Schema({
       type: String,
       default: '',
     },
+    date: {
+      type: Date,
+      // default: Date.now // Removed to prevent overwriting old payments with today's date
+    }
   }],
   invoiceNumber: {
     type: Number,
