@@ -160,27 +160,51 @@ export default function BillingPage() {
 
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = 'hi-IN';
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    let silenceTimer;
+    let finalTranscript = '';
 
     recognition.onstart = () => {
       setListening(true);
-      toast.info('Listening... Speak now');
+      toast.info('Listening... Speak slowly, I am waiting for you.', { duration: 4000 });
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setVoiceText(transcript);
-      processVoiceCommand(transcript);
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + ' ';
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      const currentText = (finalTranscript + interimTranscript).trim();
+      setVoiceText(currentText);
+
+      // Auto-process after 3 seconds of silence
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => {
+        recognition.stop();
+      }, 3000);
     };
 
     recognition.onerror = (event) => {
       setListening(false);
-      toast.error('Speech recognition error: ' + event.error);
+      if (event.error !== 'no-speech') {
+        toast.error('Speech recognition error: ' + event.error);
+      }
     };
 
     recognition.onend = () => {
       setListening(false);
+      const transcript = finalTranscript.trim();
+      if (transcript) {
+        processVoiceCommand(transcript);
+      }
     };
 
     recognition.start();
@@ -189,25 +213,119 @@ export default function BillingPage() {
   const processVoiceCommand = async (text) => {
     setVoiceLoading(true);
     try {
+      // Send products and customers for context matching
       const response = await fetch('/api/ai/process-voice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voiceText: text }),
+        body: JSON.stringify({
+          voiceText: text,
+          products: products.map(p => ({ itemName: p.itemName, company: p.company, rate: p.rate })),
+          customers: customers.map(c => ({ name: c.name }))
+        }),
       });
 
       const result = await response.json();
       if (result.success) {
-        await createTransactionFromVoice(result.data);
-        toast.success('Transaction created successfully!');
-        setVoiceText('');
+        // Populate the manual billing form for user review/edit
+        populateFormFromVoice(result.data);
+        toast.success('बिल तैयार है! कृपया review करें और Save करें।');
       } else {
-        toast.error('Failed to process voice command');
+        toast.error('Failed to process voice command: ' + (result.error || ''));
       }
     } catch (error) {
+      console.error('Voice processing error:', error);
       toast.error('Error processing voice command');
     } finally {
       setVoiceLoading(false);
     }
+  };
+
+  // Populate manual billing form from AI-parsed voice data
+  const populateFormFromVoice = (data) => {
+    // Set customer
+    const searchName = (data.customerName || '').trim().toLowerCase();
+    let matchedCustomer = null;
+
+    if (searchName) {
+      // Try exact match first
+      matchedCustomer = customers.find(
+        c => c.name.trim().toLowerCase() === searchName
+      );
+
+      // Try partial match if exact match not found
+      if (!matchedCustomer) {
+        matchedCustomer = customers.find(
+          c => c.name.trim().toLowerCase().includes(searchName) ||
+            searchName.includes(c.name.trim().toLowerCase())
+        );
+      }
+    }
+
+    // Handle unknown customer warning - increased to 10 seconds (10000ms)
+    if (data.customerName && !matchedCustomer && !data.isCustomerKnown) {
+      toast.warning(`⚠️ "${data.customerName}" database me nahi hai. Pehle 'Add Customer' se shop name aur Dealer ID add karein.`, {
+        duration: 10000,
+        position: 'top-center'
+      });
+    }
+
+    setBillData(prev => ({
+      ...prev,
+      customerName: matchedCustomer ? matchedCustomer.name : '',
+      customerId: matchedCustomer?._id || '',
+      paymentMode: data.paymentMode || 'CASH',
+      paidAmount: String(data.paidAmount || 0),
+      labourCharges: String(data.labourCharges || ''),
+    }));
+
+    // Set items - SUPER STRICT match with products
+    if (data.items && data.items.length > 0) {
+      const newItems = data.items.map(item => {
+        const itemLower = (item.itemName || '').toLowerCase();
+        const companyLower = (item.company || '').toLowerCase();
+
+        // 1. Try exact match for both Item and Company
+        let matchedProduct = products.find(p =>
+          p.itemName.toLowerCase() === itemLower &&
+          (p.company || '').toLowerCase() === companyLower
+        );
+
+        // 2. Try match Item if Company is empty or not found
+        if (!matchedProduct) {
+          matchedProduct = products.find(p =>
+            p.itemName.toLowerCase() === itemLower
+          );
+        }
+
+        // 3. Try partial match as fallback (only if very close)
+        if (!matchedProduct) {
+          matchedProduct = products.find(p =>
+            p.itemName.toLowerCase().includes(itemLower) ||
+            itemLower.includes(p.itemName.toLowerCase())
+          );
+        }
+
+        // If no product found in database, SKIP this item (Strict Adherence)
+        if (!matchedProduct) return null;
+
+        const displayName = `${matchedProduct.itemName} | ${matchedProduct.company}`;
+        const rate = matchedProduct.rate || 0;
+        const qty = item.qty || 0;
+        const amount = qty * rate;
+
+        return {
+          itemName: displayName,
+          qty: String(qty),
+          rate: String(rate),
+          amount: amount
+        };
+      }).filter(Boolean); // Remove nulls (unrecognized items)
+
+      setBillItems(newItems);
+    }
+
+    // Switch to manual mode so user can review/edit
+    setMode('manual');
   };
 
   const createTransactionFromVoice = async (data) => {
@@ -359,22 +477,35 @@ export default function BillingPage() {
 
       // Find or create customer
       let customerId = billData.customerId;
-      if (billData.customerName && !customerId) {
-        const existingCustomer = customers.find(
-          (c) => c.name.toLowerCase() === billData.customerName.toLowerCase()
+      if (billData.customerName && (!customerId || customerId === '')) {
+        const searchName = billData.customerName.trim().toLowerCase();
+        // Try exact match first
+        let existingCustomer = customers.find(
+          (c) => c.name.trim().toLowerCase() === searchName
         );
+
+        // Try partial/fuzzy match if exact match not found
+        if (!existingCustomer) {
+          existingCustomer = customers.find(
+            (c) => c.name.trim().toLowerCase().includes(searchName) ||
+              searchName.includes(c.name.trim().toLowerCase())
+          );
+        }
+
         if (existingCustomer) {
           customerId = existingCustomer._id;
         } else {
+          // Create new customer if not found
           const customerResponse = await fetch('/api/customers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: billData.customerName }),
+            body: JSON.stringify({ name: billData.customerName.trim() }),
           });
           const customerData = await customerResponse.json();
           if (customerData.success) {
             customerId = customerData.customer._id;
             fetchCustomers();
+            toast.info(`New customer "${billData.customerName}" created!`);
           }
         }
       }
@@ -761,6 +892,18 @@ export default function BillingPage() {
                   <p className="text-gray-700 mt-1">{voiceText}</p>
                 </div>
               )}
+
+              {/* Hindi Voice Examples */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="font-semibold text-green-800 mb-2">🎤 ऐसे बोलें:</p>
+                <ul className="text-sm text-green-700 space-y-1">
+                  <li>• "Prakhar Parth को 100 बोरा Urea दिया 266 rate से"</li>
+                  <li>• "Maa Kali Traders को 50 bag DAP IPL, सब उधार"</li>
+                  <li>• "Ram Singh को 20 बोरा Zinc, 30 बोरा MOP, total 45000, cash लिया"</li>
+                  <li>• "Shyam को 10 NPK Kisan 500 rate, 5000 total, 3000 जमा, 2000 बकाया"</li>
+                </ul>
+                <p className="text-xs text-green-600 mt-2">बोलने के बाद फॉर्म में देखें, edit करें, फिर Save करें</p>
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -963,6 +1106,7 @@ export default function BillingPage() {
                           type="number"
                           placeholder="Qty"
                           value={item.qty}
+                          onWheel={(e) => e.target.blur()}
                           onChange={(e) => updateBillItem(index, 'qty', e.target.value)}
                           className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           required
@@ -974,6 +1118,7 @@ export default function BillingPage() {
                           type="number"
                           placeholder="Rate"
                           value={item.rate}
+                          onWheel={(e) => e.target.blur()}
                           onChange={(e) => updateBillItem(index, 'rate', e.target.value)}
                           className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           required
@@ -985,6 +1130,7 @@ export default function BillingPage() {
                           type="number"
                           value={item.amount}
                           readOnly
+                          onWheel={(e) => e.target.blur()}
                           className="bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
@@ -1013,6 +1159,7 @@ export default function BillingPage() {
                     <Input
                       type="number"
                       placeholder="Enter cost..."
+                      onWheel={(e) => e.target.blur()}
                       className="h-8 font-medium border-gray-200 flex-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       value={billData.labourCharges}
                       onChange={(e) => setBillData({ ...billData, labourCharges: e.target.value })}
@@ -1204,8 +1351,9 @@ export default function BillingPage() {
                                 <Input
                                   type="number"
                                   placeholder={t('amount')}
-                                  className="h-9 text-sm border-gray-200"
+                                  className="h-9 text-sm border-gray-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   value={p.amount}
+                                  onWheel={(e) => e.target.blur()}
                                   onChange={(e) => updatePaymentRow(idx, 'amount', e.target.value)}
                                   required
                                 />
@@ -1252,6 +1400,7 @@ export default function BillingPage() {
                       type="number"
                       placeholder={t('amountPaid')}
                       value={isSplitPayment ? calculateTotalPaid() : billData.paidAmount}
+                      onWheel={(e) => e.target.blur()}
                       onChange={(e) => setBillData({ ...billData, paidAmount: e.target.value })}
                       readOnly={isSplitPayment}
                       className={`${isSplitPayment ? "bg-gray-100 font-bold" : "text-lg ring-1 ring-gray-200"} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
