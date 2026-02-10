@@ -36,6 +36,10 @@ router.post('/', protect, async (req, res) => {
             date
         } = req.body;
 
+        // Generate Invoice Number
+        const lastTransaction = await Transaction.findOne({ ownerId }).sort({ invoiceNumber: -1 });
+        const invoiceNumber = lastTransaction && lastTransaction.invoiceNumber ? lastTransaction.invoiceNumber + 1 : 1;
+
         // Prepare payments array with correct dates and filter zero amounts
         const processedPayments = (payments || [])
             .filter(p => p.amount > 0)

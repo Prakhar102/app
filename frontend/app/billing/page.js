@@ -20,6 +20,7 @@ import { Mic, Plus, Trash2, Save, Loader2, Building2, Phone, MapPin, FileText, C
 import { useLanguage } from '@/context/LanguageContext';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { Combobox } from '@/components/ui/combobox';
 
 export default function BillingPage() {
   const { data: session } = useSession();
@@ -34,6 +35,7 @@ export default function BillingPage() {
   const [shopConfig, setShopConfig] = useState({});
   const [bankAccounts, setBankAccounts] = useState([]);
   const [logoBase64, setLogoBase64] = useState('');
+  const [stampBase64, setStampBase64] = useState('');
 
   // Manual billing form
   // Manual billing form
@@ -81,7 +83,35 @@ export default function BillingPage() {
     fetchCustomers();
     fetchSettings();
     fetchBankAccounts();
+    loadStamp();
   }, []);
+
+  const loadStamp = () => {
+    console.log('🔄 Attempting to load stamp from /stamp.png...');
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => {
+      console.log('✅ Stamp image loaded! Dimensions:', img.width, 'x', img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      try {
+        const dataURL = canvas.toDataURL('image/png');
+        setStampBase64(dataURL);
+        console.log('✅ Stamp converted to base64 successfully! Length:', dataURL.length);
+      } catch (err) {
+        console.error('❌ Failed to convert stamp to base64:', err);
+      }
+    };
+    img.onerror = (e) => {
+      console.error('❌ Failed to load stamp image from /stamp.png');
+      console.error('Error details:', e);
+      console.log('💡 Make sure stamp.png exists in app/frontend/public/ folder');
+    };
+    img.src = '/stamp.png';
+  };
 
   const fetchProducts = async () => {
     try {
@@ -550,7 +580,7 @@ export default function BillingPage() {
       const result = await response.json();
       if (result.success) {
         toast.success('Bill saved successfully!');
-        // generatePDF(result.transaction); - Removed auto-download per user request
+        // generatePDF(result.transaction); // Disabled - User downloads from billing history
         // Reset form
         setBillItems([{ itemName: '', qty: '', rate: '', amount: 0 }]);
         setBillData({ customerName: '', customerId: '', paymentMode: 'CASH', paidAmount: '0', labourCharges: '', vehicleNumber: '', isDelivered: true });
@@ -638,7 +668,7 @@ export default function BillingPage() {
     }
   };
 
-  const generatePDF = (transaction) => {
+  const generatePDF = async (transaction) => {
     const doc = new jsPDF({
       format: 'a5',
       unit: 'mm',
@@ -822,15 +852,65 @@ export default function BillingPage() {
     const deliveryStatus = transaction.isDelivered ? 'YES' : 'NO';
     doc.text(`Delivered: ${deliveryStatus}`, 12, deliveryInfoY);
 
-    // Footer
-    doc.setFont(undefined, 'normal');
+    // Calculate dynamic footer position
+    let footerStartY = Math.max(deliveryInfoY + 10, 170); // At least 10mm after delivery info, minimum 170
+
+    // Check if we need a new page (A5 height is ~210mm, leave 10mm margin)
+    if (footerStartY > 175) {
+      doc.addPage();
+      footerStartY = 20; // Start at top of new page
+    }
+
+    // Footer Layout
+    // 1. Thank You message
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text('Thank you for your business!', 105, 185, { align: 'center' });
-    doc.text('_____________________', 105, 195, { align: 'center' });
-    doc.text('Authorized Signature', 105, 200, { align: 'center' });
+    doc.setTextColor(0); // Black
+    doc.text('Thank you for your business!', 105, footerStartY, { align: 'center' });
+
+    const stampY = footerStartY + 8;
+    const signatureY = stampY + 17;
+
+    // 2. STAMP Image
+    console.log('📄 PDF Generation - stampBase64 available?', !!stampBase64);
+    if (stampBase64) {
+      console.log('📄 stampBase64 length:', stampBase64.length);
+      try {
+        // Add blue border around stamp - matching text color
+        doc.setDrawColor(63, 81, 181); // Exact match to stamp text color
+        doc.setLineWidth(1.0); // 1.0mm border
+        doc.rect(85, stampY, 40, 16); // Border exactly matching stamp size
+
+        // Add stamp image above signature
+        // Centered at x=105, with width=40mm, height will auto-scale
+        doc.addImage(stampBase64, 'PNG', 85, stampY, 40, 16);
+        console.log("✅ Stamp image added to PDF successfully");
+      } catch (err) {
+        console.error("❌ Stamp Image Error:", err);
+        // Fallback to text
+        doc.setFontSize(12);
+        doc.setTextColor(41, 128, 185);
+        doc.text('KISAN KHAD BHANDAR', 105, stampY + 7, { align: 'center' });
+      }
+    } else {
+      console.warn('⚠️ Stamp not loaded, using fallback text');
+      // Fallback if stamp not loaded
+      doc.setFontSize(12);
+      doc.setTextColor(41, 128, 185);
+      doc.text('KISAN KHAD BHANDAR', 105, stampY + 7, { align: 'center' });
+      doc.setFontSize(9);
+      doc.text('Partner/Auth, Signatory', 105, stampY + 12, { align: 'center' });
+    }
+
+    // 3. Signature Line
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0); // Black
+    doc.text('_____________________', 105, signatureY, { align: 'center' });
+    doc.text('Authorized Signature', 105, signatureY + 5, { align: 'center' });
 
     // Download
-    doc.save(`invoice_${transaction._id}.pdf`);
+    console.log("Saving PDF...");
+    doc.save(`invoice_STAMPED_IMG_${transaction._id}.pdf`);
   };
 
   return (
@@ -897,7 +977,7 @@ export default function BillingPage() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <p className="font-semibold text-green-800 mb-2">🎤 ऐसे बोलें:</p>
                 <ul className="text-sm text-green-700 space-y-1">
-                  <li>• "Prakhar Parth को 100 बोरा Urea दिया 266 rate से"</li>
+
                   <li>• "Maa Kali Traders को 50 bag DAP IPL, सब उधार"</li>
                   <li>• "Ram Singh को 20 बोरा Zinc, 30 बोरा MOP, total 45000, cash लिया"</li>
                   <li>• "Shyam को 10 NPK Kisan 500 rate, 5000 total, 3000 जमा, 2000 बकाया"</li>
@@ -919,22 +999,24 @@ export default function BillingPage() {
                   <div className="space-y-2">
                     <Label>{t('shopName')}</Label>
                     <div className="flex gap-2">
-                      <Input
-                        list="customers-list"
-                        placeholder={t('enterShopName')}
-                        value={billData.customerName}
-                        onChange={(e) => {
-                          const name = e.target.value;
-                          const customer = customers.find((c) => c.name === name);
-                          setBillData({
-                            ...billData,
-                            customerName: name,
-                            customerId: customer?._id || '',
-                          });
-                        }}
-                        required
-                        className="flex-1"
-                      />
+                      <div className="flex-1">
+                        <Combobox
+                          items={customers.map(c => ({ label: c.name, value: c.name }))} // Use name as value for simplicity in this form
+                          value={billData.customerName}
+                          onChange={(val) => {
+                            const customer = customers.find((c) => c.name === val);
+                            setBillData({
+                              ...billData,
+                              customerName: val,
+                              customerId: customer?._id || '',
+                            });
+                          }}
+                          placeholder={t('enterShopName')}
+                          searchPlaceholder="Search customer..."
+                          creatable
+                          emptyText="No customer found."
+                        />
+                      </div>
                       <Dialog open={isCustomerModalOpen} onOpenChange={setIsCustomerModalOpen}>
                         <DialogTrigger asChild>
                           <Button type="button" variant="outline" size="icon" title="Add New Customer">
@@ -1026,11 +1108,11 @@ export default function BillingPage() {
                         </DialogContent>
                       </Dialog>
                     </div>
-                    <datalist id="customers-list">
+                    {/* <datalist id="customers-list">
                       {customers.map((customer) => (
                         <option key={customer._id} value={customer.name} />
                       ))}
-                    </datalist>
+                    </datalist> */ }
                   </div>
                 </div>
 
@@ -1048,21 +1130,13 @@ export default function BillingPage() {
                     <div key={index} className="grid grid-cols-12 gap-2 items-end">
                       <div className="col-span-4">
                         <Label className="text-xs">{t('itemName')}</Label>
-                        <Input
-                          list={`products-list-${index}`}
-                          placeholder="Select Product"
-                          value={item.itemName}
-                          onChange={(e) => updateBillItem(index, 'itemName', e.target.value)}
-                          required
-                        />
-                        <datalist id={`products-list-${index}`}>
-                          {/* 
-                            Logic: 
-                            1. Get unique base item names.
-                            2. If current value matches a base item name exactly, show variants.
-                            3. Otherwise, show base item names.
-                          */}
-                          {(() => {
+                        <Combobox
+                          items={(() => {
+                            // Logic:
+                            // 1. Get unique base item names.
+                            // 2. If current value matches a base item name exactly, show variants.
+                            // 3. Otherwise, show base item names.
+
                             // Normalize unique names case-insensitively
                             const nameMap = products.reduce((acc, p) => {
                               const lowName = p.itemName.trim().toLowerCase();
@@ -1088,17 +1162,40 @@ export default function BillingPage() {
                               );
                               // Only show variants if there are multiple or if the single variant has a company
                               if (variants.length > 1 || (variants[0]?.company)) {
-                                return variants.map(v => (
-                                  <option key={v._id} value={`${v.itemName} | ${v.company || 'Standard'}`} />
-                                ));
+                                return variants.map(v => ({
+                                  label: `${v.itemName} | ${v.company || 'Standard'}`,
+                                  value: `${v.itemName} | ${v.company || 'Standard'}`
+                                }));
                               }
                             }
 
-                            return uniqueNames.map(name => (
-                              <option key={name} value={name} />
-                            ));
+
+                            const items = [];
+                            uniqueNames.forEach(name => {
+                              const variants = products.filter(p => p.itemName.trim().toLowerCase() === name.trim().toLowerCase());
+                              const hasVariants = variants.length > 1 || (variants.length === 1 && variants[0]?.company);
+
+                              if (hasVariants) {
+                                items.push({
+                                  label: name,
+                                  value: name, // generic value
+                                  children: variants.map(v => ({
+                                    label: (v.company || 'Standard').trim(),
+                                    value: `${v.itemName.trim()} | ${(v.company || 'Standard').trim()}`
+                                  }))
+                                });
+                              } else {
+                                items.push({ label: name, value: name });
+                              }
+                            });
+                            return items;
                           })()}
-                        </datalist>
+                          value={item.itemName}
+                          displayValue={item.itemName /* Force display the current value even if not in list */}
+                          onChange={(val) => updateBillItem(index, 'itemName', val)}
+                          placeholder="Select Product"
+                          searchPlaceholder="Search product..."
+                        />
                       </div>
                       <div className="col-span-2">
                         <Label className="text-xs">{t('quantity')}</Label>
