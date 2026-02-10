@@ -7,7 +7,15 @@ import authRoutes from './routes/auth.js';
 import customerRoutes from './routes/customers.js';
 import productRoutes from './routes/products.js';
 
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 connectDB();
 
@@ -32,6 +40,10 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/bank-accounts', bankAccountRoutes);
 import aiRoutes from './routes/ai.js';
 app.use('/api/ai', aiRoutes);
+import dashboardRoutes from './routes/dashboard.js';
+app.use('/api/dashboard', dashboardRoutes);
+import settingsRoutes from './routes/settings.js';
+app.use('/api/settings', settingsRoutes);
 
 
 const PORT = process.env.PORT || 5000;
@@ -49,3 +61,4 @@ server.on('error', (err) => {
         throw err;
     }
 });
+// Force restart for env update

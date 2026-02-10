@@ -123,6 +123,35 @@ export default function CustomersPage() {
     });
   };
 
+  const loadStampBase64 = () => {
+    return new Promise((resolve, reject) => {
+      console.log('🔄 Loading stamp for PDF...');
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        console.log('✅ Stamp loaded! Dimensions:', img.width, 'x', img.height);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        try {
+          const dataURL = canvas.toDataURL('image/png');
+          console.log('✅ Stamp converted to base64! Length:', dataURL.length);
+          resolve(dataURL);
+        } catch (err) {
+          console.error('❌ Failed to convert stamp:', err);
+          reject(err);
+        }
+      };
+      img.onerror = (e) => {
+        console.error('❌ Failed to load stamp from /stamp.png');
+        reject('Failed to load stamp');
+      };
+      img.src = '/stamp.png';
+    });
+  };
+
   const generatePDF = async (transaction) => {
     setPdfLoadingId(transaction._id);
     try {
@@ -314,7 +343,6 @@ export default function CustomersPage() {
         doc.setTextColor(0);
         doc.setFont(undefined, 'normal');
       } else if (transaction.payments && transaction.payments.length > 0) {
-        doc.text(`Payment History:`, 12, paymentInfoY + 5);
         transaction.payments.filter(p => p.amount > 0).forEach((p, i) => {
           let dateStr = '';
           // Use payment date if available, otherwise fallback to transaction date (Bill Date)
@@ -325,7 +353,7 @@ export default function CustomersPage() {
           const payerInfo = p.payerName ? ` [By: ${p.payerName}]` : '';
 
           const lineText = dateStr ? `${dateStr} - ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}` : `- ${p.mode}: Rs. ${p.amount}${accountInfo}${payerInfo}`;
-          doc.text(lineText, 15, paymentInfoY + 10 + (i * 5));
+          doc.text(lineText, 15, paymentInfoY + 5 + (i * 5));
         });
       } else {
         doc.text(`Mode: ${transaction.paymentMode}`, 12, paymentInfoY + 5);
@@ -337,12 +365,57 @@ export default function CustomersPage() {
         }
       }
 
-      // Footer
+      // Calculate dynamic footer position based on payment details
+      let footerStartY = paymentInfoY + 30; // Default: 30mm after payment info start
+
+      // Adjust if there are multiple payments (split or payment history)
+      if (transaction.payments && transaction.payments.length > 1) {
+        footerStartY = paymentInfoY + 30 + (transaction.payments.length * 5);
+      }
+
+      // Ensure minimum position and check for page break
+      footerStartY = Math.max(footerStartY, 170);
+      if (footerStartY > 175) {
+        doc.addPage();
+        footerStartY = 20;
+      }
+
+      // Footer with Stamp
       doc.setFont(undefined, 'normal');
       doc.setFontSize(8);
-      doc.text('Thank you for your business!', 105, 185, { align: 'center' });
-      doc.text('_____________________', 105, 195, { align: 'center' });
-      doc.text('Authorized Signature', 105, 200, { align: 'center' });
+      doc.setTextColor(0);
+      doc.text('Thank you for your business!', 105, footerStartY, { align: 'center' });
+
+      const stampY = footerStartY + 8;
+      const signatureY = stampY + 17;
+
+      // Load and add stamp
+      try {
+        const stampBase64 = await loadStampBase64();
+        console.log('📄 Adding stamp to PDF...');
+
+        // Add blue border around stamp - matching text color
+        doc.setDrawColor(63, 81, 181); // Exact match to stamp text color
+        doc.setLineWidth(1.0); // 1.0mm border
+        doc.rect(85, stampY, 40, 16); // Border exactly matching stamp size
+
+        doc.addImage(stampBase64, 'PNG', 85, stampY, 40, 16);
+        console.log('✅ Stamp added to PDF successfully!');
+      } catch (err) {
+        console.warn('⚠️ Stamp not available, using text fallback');
+        // Fallback to text
+        doc.setFontSize(12);
+        doc.setTextColor(41, 128, 185);
+        doc.text('KISAN KHAD BHANDAR', 105, stampY + 7, { align: 'center' });
+        doc.setFontSize(9);
+        doc.text('Partner/Auth, Signatory', 105, stampY + 12, { align: 'center' });
+      }
+
+      // Signature line
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(0);
+      doc.text('_____________________', 105, signatureY, { align: 'center' });
+      doc.text('Authorized Signature', 105, signatureY + 5, { align: 'center' });
 
       // Download
       doc.save(`invoice_${transaction._id}.pdf`);
