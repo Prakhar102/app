@@ -1,10 +1,11 @@
-# Smart Khaad Manager - Fertilizer Shop POS System 🌾
+# Smart Khad Manager - Fertilizer Shop POS System 🌾
 
 A complete, production-ready SaaS web application for fertilizer shops with AI Voice capabilities, Inventory Management, Customer Ledger, and comprehensive reporting features.
 
 ## 🚀 Features
 
 ### 🎯 Core Features
+
 - **AI Voice Assistant** - Create bills by speaking in Hindi/English
   - Example: "Raju ko 10 Urea diya 5000 mein"
   - Powered by Groq AI (llama-3.3-70b-versatile)
@@ -66,13 +67,15 @@ A complete, production-ready SaaS web application for fertilizer shops with AI V
 ## 🔧 Installation
 
 1. **Clone and Install**
+
 ```bash
 cd /app
 yarn install
 ```
 
 2. **Environment Variables**
-The `.env` file is already configured with:
+   The `.env` file is already configured with:
+
 ```env
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=khaad_manager
@@ -88,6 +91,7 @@ GROQ_API_KEY=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
 ```
 
 3. **Start the Application**
+
 ```bash
 # Development
 yarn dev
@@ -98,6 +102,7 @@ yarn start
 ```
 
 4. **Access the Application**
+
 - Open browser: http://localhost:3000
 - Or visit: https://khaadmanager.preview.emergentagent.com
 
@@ -132,6 +137,7 @@ yarn start
 ### Creating Bills
 
 #### Method 1: Voice Command (AI Assistant)
+
 1. Go to Billing page
 2. Click "Voice Command" tab
 3. Click the microphone button
@@ -143,6 +149,7 @@ yarn start
 5. System automatically creates transaction and updates stock
 
 #### Method 2: Manual Billing
+
 1. Go to Billing page
 2. Click "Manual Billing" tab
 3. Enter customer name
@@ -153,18 +160,21 @@ yarn start
 8. PDF invoice downloads automatically
 
 ### Managing Inventory
+
 - **Add Stock**: Create new product or use Purchase transaction
 - **Update Stock**: Edit product quantity/rate
 - **Low Stock Alerts**: Red badge appears on dashboard when stock is low
 - **Delete Products**: Only owner can delete
 
 ### Customer Ledger
+
 - View all customers with their due amounts
 - Green badge = No dues (Clear)
 - Red badge = Outstanding dues
 - Use Payment transaction type to settle dues
 
 ### Reports & Day Book
+
 1. Go to Reports
 2. Select date range
 3. View summary:
@@ -176,6 +186,7 @@ yarn start
 4. Export to CSV for detailed analysis
 
 ### Staff Management (Owner Only)
+
 1. Go to Settings
 2. Click "Create Staff Account"
 3. Enter staff details
@@ -188,16 +199,19 @@ yarn start
 ## 🔑 Authentication Features
 
 ### Signup
+
 - Email verification via welcome email
 - Secure password hashing (bcrypt)
 - Automatic shop configuration setup
 
 ### Login
+
 - Email and password authentication
 - JWT-based session management
 - Remember me functionality
 
 ### Forgot Password
+
 1. Click "Forgot Password" on login page
 2. Enter your email
 3. Check email for 6-digit OTP
@@ -209,22 +223,27 @@ yarn start
 ### Supported Commands
 
 **Sale Transactions:**
+
 - "Raju ko 10 Urea diya 5000 mein" → Sale with full payment
 - "Mohan ko 20 DAP udhaar" → Credit sale (no payment)
 - "Suresh ko 15 NPK diya 3000 online" → Online payment
 
 **Purchase (Stock In):**
+
 - "50 Urea aaya 25000 mein" → Add 50 units of Urea
 
 **Expenses:**
+
 - "200 rupya chai ka diya" → Chai expense
 - "5000 ka kiraya diya" → Rent expense
 
 **Payments Received:**
+
 - "Ramesh ne 2000 diye" → Cash payment
 - "Vijay ne 5000 online pay kiya" → Online payment
 
 ### Voice Recognition
+
 - Supports Hindi and English
 - Uses browser's native speech recognition
 - Works on Chrome, Edge (best support)
@@ -233,6 +252,7 @@ yarn start
 ## 📊 Database Schema
 
 ### User
+
 ```javascript
 {
   name: String,
@@ -251,6 +271,7 @@ yarn start
 ```
 
 ### Product
+
 ```javascript
 {
   ownerId: ObjectId,
@@ -263,6 +284,7 @@ yarn start
 ```
 
 ### Customer
+
 ```javascript
 {
   ownerId: ObjectId,
@@ -274,6 +296,7 @@ yarn start
 ```
 
 ### Transaction
+
 ```javascript
 {
   ownerId: ObjectId,
@@ -301,6 +324,7 @@ yarn start
 ### Manual Testing Checklist
 
 **Authentication:**
+
 - [x] Sign up with new email
 - [x] Receive welcome email
 - [x] Login with credentials
@@ -309,12 +333,14 @@ yarn start
 - [x] Staff login with separate credentials
 
 **Inventory:**
+
 - [x] Add new product
 - [x] Edit product details
 - [x] Delete product (owner only)
 - [x] Low stock alert appears when qty <= threshold
 
 **Billing:**
+
 - [x] Create manual bill
 - [x] Generate PDF invoice
 - [x] Partial payment (creates due)
@@ -323,24 +349,28 @@ yarn start
 - [x] Voice command creates transaction
 
 **Customer Ledger:**
+
 - [x] Add customer
 - [x] Customer due increases on credit sale
 - [x] Due decreases on payment
 - [x] View customer list with due badges
 
 **Reports:**
+
 - [x] Day book shows correct totals
 - [x] Cash vs Online breakdown
 - [x] Date range filtering
 - [x] Export to CSV
 
 **Staff Management:**
+
 - [x] Owner creates staff account
 - [x] Staff can create bills
 - [x] Staff cannot delete transactions
 - [x] Staff cannot view profit margins
 
 ### Test Credentials
+
 ```
 Owner Account:
 Email: rajesh@khaadshop.com
@@ -375,26 +405,32 @@ Password: rajesh123
 ## 📦 Deployment
 
 ### Prerequisites
+
 - MongoDB instance (local or Atlas)
 - Node.js 18+ environment
 - Email SMTP credentials
 - Groq API key
 
 ### Environment Setup
+
 Update `.env` with your production values:
+
 - NEXTAUTH_URL: Your production domain
 - MONGO_URL: MongoDB connection string
 - EMAIL_USER/PASS: Your email credentials
 - GROQ_API_KEY: Your Groq API key
 
 ### Build and Start
+
 ```bash
 yarn build
 yarn start
 ```
 
 ### Supervisor Configuration
+
 The app runs under supervisor for auto-restart:
+
 ```bash
 sudo supervisorctl status nextjs
 sudo supervisorctl restart nextjs
@@ -403,22 +439,26 @@ sudo supervisorctl restart nextjs
 ## 🐛 Troubleshooting
 
 ### MongoDB Connection Failed
+
 - Check if MongoDB is running: `sudo supervisorctl status mongodb`
 - Verify MONGO_URL in .env
 - Check MongoDB logs: `tail -f /var/log/mongodb/mongodb.log`
 
 ### Email Not Sending
+
 - Verify EMAIL_USER and EMAIL_PASS in .env
 - For Gmail, use App Password (not regular password)
 - Check "Less secure app access" if using regular password
 
 ### Voice Recognition Not Working
+
 - Use Chrome or Edge browser
 - Grant microphone permission
 - Check browser console for errors
 - Fallback to manual entry
 
 ### PDF Not Generating
+
 - Check browser console for errors
 - Verify jsPDF is installed: `yarn list jspdf`
 - Check if shop config is set in Settings
@@ -426,6 +466,7 @@ sudo supervisorctl restart nextjs
 ## 📞 Support
 
 For issues or questions:
+
 - Check the troubleshooting section
 - Review the user guide
 - Contact: prakharparth010204@gmail.com
@@ -445,7 +486,7 @@ For issues or questions:
 
 ## 📄 License
 
-© 2025 Smart Khaad Manager. All rights reserved.
+© 2025 Smart Khad Manager. All rights reserved.
 
 ---
 
