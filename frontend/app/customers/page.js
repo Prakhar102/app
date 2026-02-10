@@ -823,7 +823,21 @@ export default function CustomersPage() {
           </DialogContent>
         </Dialog>
 
-      </div >
-    </DashboardLayout >
+      </div>
+    </DashboardLayout>
+  );
+}
+
+export default function CustomersPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        </div>
+      </DashboardLayout>
+    }>
+      <CustomersPageContent />
+    </Suspense>
   );
 }

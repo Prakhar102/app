@@ -1,6 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, Package, AlertTriangle, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, AlertTriangle, ChevronDown, ChevronUp, Search, X, Loader2 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSession } from 'next-auth/react';
 import { useSearchParams, useRouter } from 'next/navigation';
@@ -27,7 +27,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export default function InventoryPage() {
+function InventoryPageContent() {
   const { t } = useLanguage();
   const { data: session } = useSession();
   const searchParams = useSearchParams();
@@ -447,5 +447,19 @@ export default function InventoryPage() {
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function InventoryPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-[400px]">
+          <Loader2 className="w-8 h-8 animate-spin text-green-600" />
+        </div>
+      </DashboardLayout>
+    }>
+      <InventoryPageContent />
+    </Suspense>
   );
 }
