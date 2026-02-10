@@ -43,7 +43,7 @@ export default function DashboardLayout({ children }) {
     <div className="min-h-screen bg-gray-50">
       {/* Mobile Header */}
       <div className="lg:hidden bg-white border-b px-4 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-green-600">Smart Khaad</h1>
+        <h1 className="text-xl font-bold text-green-600">Smart Khad</h1>
         <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
           {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </Button>
@@ -58,7 +58,7 @@ export default function DashboardLayout({ children }) {
           <div className="flex flex-col h-full">
             {/* Logo */}
             <div className="p-6 border-b">
-              <h1 className="text-2xl font-bold text-green-600">Smart Khaad</h1>
+              <h1 className="text-2xl font-bold text-green-600">Smart Khad</h1>
               <p className="text-sm text-gray-600 mt-1">
                 {session?.user?.name}
                 {session?.user?.role === 'STAFF' && (
