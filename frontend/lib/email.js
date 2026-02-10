@@ -15,10 +15,10 @@ export async function sendOTPEmail(email, otp) {
   const mailOptions = {
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     to: email,
-    subject: 'Password Reset OTP - Smart Khaad Manager',
+    subject: 'Password Reset OTP - Smart Khad Manager',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #16a34a;">Smart Khaad Manager</h2>
+        <h2 style="color: #16a34a;">Smart Khad Manager</h2>
         <p>You requested a password reset. Use the OTP below to reset your password:</p>
         <div style="background: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
           ${otp}
@@ -42,11 +42,11 @@ export async function sendWelcomeEmail(email, name) {
   const mailOptions = {
     from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
     to: email,
-    subject: 'Welcome to Smart Khaad Manager!',
+    subject: 'Welcome to Smart Khad Manager!',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #16a34a;">Welcome ${name}! 🎉</h2>
-        <p>Thank you for joining Smart Khaad Manager. Your account has been successfully created.</p>
+        <p>Thank you for joining Smart Khad Manager. Your account has been successfully created.</p>
         <p>You can now login and start managing your fertilizer shop efficiently.</p>
         <p><strong>Features you'll love:</strong></p>
         <ul>

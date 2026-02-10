@@ -7,7 +7,7 @@ import { LanguageProvider } from '@/context/LanguageContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: 'Smart Khaad Manager - Fertilizer Shop POS',
+  title: 'Smart Khad Manager - Fertilizer Shop POS',
   description: 'Complete POS system for fertilizer shops with AI Voice assistance',
 };
 
