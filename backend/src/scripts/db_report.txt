@@ -1,0 +1,6 @@
+Connected to DB
+Found 3 users:
+- User: Swati Kumari (swatimehta9065@gmail.com) Role: OWNER ID: 697da415c0dc241ee60c0e1a -> Products: 90
+- User: Pushpa Mehta (swatimehta1123@gmail.com) Role: OWNER ID: 697e0fbf3d68ecea60458e52 -> Products: 0
+- User: sm  (21052717@kiit.ac.in) Role: STAFF ID: 697e3cfb27d7c4f67f275bb3 -> Products: 0
+Total Products in DB: 90
