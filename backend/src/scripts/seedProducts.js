@@ -37,8 +37,8 @@ const seed = async () => {
     try {
         await connectDB();
 
-        // Find the primary owner
-        const owner = await User.findOne({ role: 'OWNER' });
+        // Find the specific owner
+        const owner = await User.findOne({ email: 'swatimehta1123@gmail.com' });
         if (!owner) {
             console.error('No OWNER user found in database. Please create a user first.');
             process.exit(1);

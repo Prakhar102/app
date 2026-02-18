@@ -249,7 +249,7 @@ export const translations = {
     productSubtitle: 'इन्वेंट्री में कुल उत्पादों की संख्या',
     quickActions: 'त्वरित कार्रवाई',
     commonTasks: 'शुरू करने के लिए सामान्य कार्य',
-    generateInvoice: 'नया चालान (Inoice) बनाएं',
+    generateInvoice: 'नया चालान (Invoice) बनाएं',
     updateStock: 'स्टॉक जोड़ें या अपडेट करें',
     viewDues: 'उधार और भुगतान देखें',
     lowStockAlert: 'कम स्टॉक अलर्ट',
