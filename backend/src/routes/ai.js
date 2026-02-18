@@ -42,7 +42,7 @@ router.post('/process-voice', protect, async (req, res) => {
             "type": "SALE" (default) or "PAYMENT" (if only money is paid) or "PURCHASE",
             "customerName": "string (match from list if possible, else use as is. If 'cash sale' or undefined, leave empty)",
             "items": [
-                { "itemName": "string (match from available products)", "qty": number, "rate": number, "amount": number }
+                { "itemName": "string (match from available products)", "company": "string (match from available product's company name)", "qty": number, "rate": number, "amount": number }
             ],
             "totalAmount": number,
             "paidAmount": number (if mentioned, else 0),

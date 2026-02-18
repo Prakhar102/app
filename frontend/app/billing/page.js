@@ -436,10 +436,8 @@ export default function BillingPage() {
       }
     }
 
-    // Calculate amount
-    if (field === 'qty' || field === 'rate') {
-      newItems[index].amount = (newItems[index].qty || 0) * (newItems[index].rate || 0);
-    }
+    // Always recalculate amount if we have qty and rate
+    newItems[index].amount = (parseFloat(newItems[index].qty) || 0) * (parseFloat(newItems[index].rate) || 0);
 
     setBillItems(newItems);
   };
