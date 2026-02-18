@@ -68,10 +68,10 @@ export default function SettingsPage() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/settings/update', {
-        method: 'POST',
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopConfig: shopData }),
+        body: JSON.stringify(shopData),
       });
 
       const data = await response.json();
